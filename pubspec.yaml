@@ -27,8 +27,17 @@ dependencies:
   path_provider: ^2.1.4
   shared_preferences: ^2.2.3
 
-  # Model AI on-device (opsional, dipakai saat mode TFLite aktif)
-  tflite_flutter: ^0.11.0
+  # NB: dependency "tflite_flutter" sengaja DILEPAS sementara — versi
+  # native TensorFlow Lite yang dibawanya (org.tensorflow:tensorflow-lite,
+  # -gpu, -api) bentrok "namespace" satu sama lain di Android Gradle Plugin
+  # terbaru (error: "Namespace 'org.tensorflow.lite' is used in multiple
+  # modules"), dan ini masalah upstream di paketnya sendiri, bukan di kode
+  # SawitVision. Karena mode Model Custom (TFLite) memang belum dipakai
+  # (belum ada model .tflite hasil training), melepasnya tidak mengurangi
+  # fungsi apapun hari ini — mode CV Klasik tetap jadi default & berjalan
+  # penuh. Pasang lagi nanti setelah ada rilis tflite_flutter yang sudah
+  # memperbaiki konflik ini (atau ganti ke package TFLite lain), lalu
+  # aktifkan ulang isi lib/services/tflite_detection_service.dart.
 
   # Grafik ringkas di Stats screen
   fl_chart: ^0.68.0
