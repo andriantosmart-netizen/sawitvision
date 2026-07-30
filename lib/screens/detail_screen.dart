@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../models/fraksi.dart';
 import '../models/scan_result.dart';
 import '../services/database_service.dart';
 import '../utils/constants.dart';

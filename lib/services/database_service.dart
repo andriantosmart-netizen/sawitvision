@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
+import '../models/fraksi.dart';
 import '../models/scan_result.dart';
 
 /// Semua pembacaan/penulisan riwayat scan lewat SQLite lokal.
