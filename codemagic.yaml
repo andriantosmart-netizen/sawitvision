@@ -46,6 +46,18 @@ workflows:
               { print }
             ' "$MANIFEST" > "$MANIFEST.tmp" && mv "$MANIFEST.tmp" "$MANIFEST"
           fi
+      - name: Perbaiki konflik JVM target Java/Kotlin (paket plugin lama, mis. tflite_flutter)
+        script: |
+          # Beberapa plugin (mis. tflite_flutter) belum diupdate untuk Kotlin
+          # Gradle plugin terbaru, sehingga target compile Java-nya (1.8) dan
+          # Kotlin-nya (17) tidak sinkron -> Gradle menganggap ini error fatal.
+          # Baris ini menurunkan pengecekan itu jadi cuma warning (bukan fatal),
+          # sesuai rekomendasi resmi Kotlin Gradle plugin untuk kasus ini.
+          PROPS=android/gradle.properties
+          touch "$PROPS"
+          if ! grep -q "kotlin.jvm.target.validation.mode" "$PROPS"; then
+            echo "kotlin.jvm.target.validation.mode=warning" >> "$PROPS"
+          fi
       - name: Ambil dependencies
         script: flutter pub get
       - name: Build APK release
