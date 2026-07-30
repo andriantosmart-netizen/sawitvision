@@ -1,0 +1,55 @@
+## Konfigurasi build otomatis via Codemagic (https://codemagic.io).
+##
+## Kegunaan: menghasilkan file APK Android tanpa perlu meng-install Flutter
+## SDK / Android Studio di komputer Anda sendiri. Codemagic menjalankan
+## seluruh proses (termasuk generate folder android/ yang sengaja tidak
+## disertakan mentah di paket ini — lihat README.md) di server mereka.
+##
+## Cara pakai singkat (detail lengkap ada di README.md):
+##   1. Upload folder project ini (termasuk file ini) ke repo GitHub baru.
+##   2. Daftar/login ke codemagic.io pakai akun GitHub yang sama.
+##   3. "Add application" → pilih repo ini → Codemagic otomatis mendeteksi
+##      file codemagic.yaml ini.
+##   4. Klik "Start new build" → pilih workflow "android-release".
+##   5. Setelah selesai (~10 menit), unduh APK dari halaman hasil build.
+##
+## Catatan: APK yang dihasilkan ditandatangani pakai debug keystore bawaan
+## Flutter (cukup untuk sideload/install manual ke HP). Untuk distribusi
+## resmi lewat Google Play, perlu setup signing config terpisah — di luar
+## cakupan panduan ini.
+
+workflows:
+  android-release:
+    name: SawitVision — Build APK Android
+    max_build_duration: 30
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+    scripts:
+      - name: Generate folder android/ jika belum ada
+        script: |
+          if [ ! -d android ]; then
+            flutter create --platforms=android --org com.sawitvision .
+          fi
+      - name: Tambahkan izin kamera ke AndroidManifest.xml
+        script: |
+          MANIFEST=android/app/src/main/AndroidManifest.xml
+          if ! grep -q "android.permission.CAMERA" "$MANIFEST"; then
+            awk '
+              /<manifest/ && !done {
+                print;
+                print "    <uses-permission android:name=\"android.permission.CAMERA\" />";
+                print "    <uses-feature android:name=\"android.hardware.camera\" android:required=\"true\" />";
+                done=1;
+                next
+              }
+              { print }
+            ' "$MANIFEST" > "$MANIFEST.tmp" && mv "$MANIFEST.tmp" "$MANIFEST"
+          fi
+      - name: Ambil dependencies
+        script: flutter pub get
+      - name: Build APK release
+        script: flutter build apk --release
+    artifacts:
+      - build/**/outputs/**/*.apk
+      - flutter_drive.log
