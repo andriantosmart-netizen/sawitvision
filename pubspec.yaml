@@ -27,17 +27,23 @@ dependencies:
   path_provider: ^2.1.4
   shared_preferences: ^2.2.3
 
-  # NB: dependency "tflite_flutter" sengaja DILEPAS sementara — versi
-  # native TensorFlow Lite yang dibawanya (org.tensorflow:tensorflow-lite,
-  # -gpu, -api) bentrok "namespace" satu sama lain di Android Gradle Plugin
-  # terbaru (error: "Namespace 'org.tensorflow.lite' is used in multiple
-  # modules"), dan ini masalah upstream di paketnya sendiri, bukan di kode
-  # SawitVision. Karena mode Model Custom (TFLite) memang belum dipakai
-  # (belum ada model .tflite hasil training), melepasnya tidak mengurangi
-  # fungsi apapun hari ini — mode CV Klasik tetap jadi default & berjalan
-  # penuh. Pasang lagi nanti setelah ada rilis tflite_flutter yang sudah
-  # memperbaiki konflik ini (atau ganti ke package TFLite lain), lalu
-  # aktifkan ulang isi lib/services/tflite_detection_service.dart.
+  # Mesin inferensi untuk mode "Model Custom (TFLite)" -- lihat
+  # lib/services/tflite_detection_service.dart.
+  #
+  # RIWAYAT: sempat DILEPAS di versi sebelumnya karena versi lama paket ini
+  # (native TensorFlow Lite yang dibawanya bentrok "namespace" di Android
+  # Gradle Plugin terbaru -- error: "Namespace 'org.tensorflow.lite' is used
+  # in multiple modules") dan karena belum ada model .tflite hasil training.
+  # Sekarang dipasang lagi (2026-08-03) karena kedua alasan itu sudah tidak
+  # berlaku: (1) sudah ada model hasil training di assets/models/, (2) rilis
+  # 0.12.0 (Okt 2025) paket ini "memodernisasi" build Android-nya ke AGP 8.6.1
+  # dengan Gradle plugins DSL baru -- perbaikan inilah yang menghilangkan
+  # konflik namespace tadi. Paket ini sekarang dipublikasikan resmi oleh
+  # publisher terverifikasi tensorflow.org (repo github.com/tensorflow/flutter-tflite).
+  # CATATAN: belum sempat di-build/dites langsung di sesi ini (tidak ada
+  # SDK Flutter di lingkungan kerja Claude) -- kalau build Codemagic masih
+  # gagal karena isu serupa, laporkan pesan errornya untuk diperbaiki lagi.
+  tflite_flutter: ^0.12.1
 
   # Grafik ringkas di Stats screen
   fl_chart: ^0.68.0

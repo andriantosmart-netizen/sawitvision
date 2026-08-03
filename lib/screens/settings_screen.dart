@@ -23,6 +23,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   DetectionEngine _engine = DetectionEngine.cvKlasik;
   double _occlusionFactor = 1.4;
+  double _tfliteConfidence = 0.35;
   UkuranJanjang _ukuran = UkuranJanjang.sedang;
 
   bool _deviceRegistered = false;
@@ -47,6 +48,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _load() async {
     final engine = await _settings.getEngine();
     final factor = await _settings.getOcclusionFactor();
+    final tfliteConfidence = await _settings.getTfliteConfidenceThreshold();
     final ukuran = await _settings.getDefaultUkuran();
     final registered = await _settings.isDeviceRegistered();
     final autoSync = await _settings.getAutoSyncEnabled();
@@ -57,6 +59,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _engine = engine;
       _occlusionFactor = factor;
+      _tfliteConfidence = tfliteConfidence;
       _ukuran = ukuran;
       _deviceRegistered = registered;
       _autoSync = autoSync;
@@ -144,8 +147,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 RadioListTile<DetectionEngine>(
                   title: const Text('Model Custom (TFLite)'),
                   subtitle: const Text(
-                      'Butuh model .tflite hasil training sendiri di assets/models/. '
-                      'Jika belum ada, otomatis kembali ke CV Klasik.'),
+                      'Model YOLO26n hasil training sendiri (assets/models/sawit_detector.tflite). '
+                      'Jika file belum ada, otomatis kembali ke CV Klasik.'),
                   value: DetectionEngine.tflite,
                   groupValue: _engine,
                   onChanged: (v) async {
@@ -154,6 +157,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     await _settings.setEngine(v);
                   },
                 ),
+                if (_engine == DetectionEngine.tflite) ...[
+                  const SizedBox(height: 4),
+                  const Text('Ambang Confidence Model Custom',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  const Text(
+                    'Deteksi dengan confidence di bawah nilai ini diabaikan. Naikkan '
+                    'kalau terlalu banyak kotak salah/palsu muncul; turunkan kalau '
+                    'terlalu banyak objek yang tidak tertangkap.',
+                    style: TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                  Slider(
+                    value: _tfliteConfidence,
+                    min: 0.1,
+                    max: 0.9,
+                    divisions: 16,
+                    label: '${(_tfliteConfidence * 100).toStringAsFixed(0)}%',
+                    onChanged: (v) => setState(() => _tfliteConfidence = v),
+                    onChangeEnd: (v) =>
+                        _settings.setTfliteConfidenceThreshold(v),
+                  ),
+                  Text(
+                      'Ambang saat ini: ${(_tfliteConfidence * 100).toStringAsFixed(0)}%'),
+                ],
                 const Divider(height: 32),
                 const Text('Faktor Koreksi Brondol Tertumpuk',
                     style: TextStyle(fontWeight: FontWeight.w600)),

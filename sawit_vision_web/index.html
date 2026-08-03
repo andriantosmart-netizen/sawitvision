@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SawitVision — Login Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-slate-50 min-h-screen flex items-center justify-center">
+  <div class="w-full max-w-sm bg-white rounded-xl shadow p-8">
+    <div class="text-center mb-6">
+      <div class="text-3xl">🌴</div>
+      <h1 class="text-xl font-bold text-emerald-800 mt-2">SawitVision</h1>
+      <p class="text-sm text-slate-500">Login Admin Web Dashboard</p>
+    </div>
+
+    <form id="loginForm" class="space-y-4">
+      <div>
+        <label class="text-sm font-medium text-slate-700">Email</label>
+        <input type="email" id="email" required
+          class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600" />
+      </div>
+      <div>
+        <label class="text-sm font-medium text-slate-700">Password</label>
+        <input type="password" id="password" required
+          class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600" />
+      </div>
+      <button type="submit" id="loginBtn"
+        class="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-medium rounded-lg py-2 text-sm">
+        Masuk
+      </button>
+      <p id="errorMsg" class="text-sm text-red-600 hidden"></p>
+    </form>
+
+    <p class="text-xs text-slate-400 mt-6 text-center">
+      Belum punya akun admin? Lihat <code>docs/SETUP_SUPABASE_WEB.md</code> untuk cara membuat
+      admin pertama lewat Supabase Dashboard.
+    </p>
+  </div>
+
+  <script src="assets/config.js"></script>
+  <script>
+    (async function init() {
+      if (!window.isSupabaseConfigured()) {
+        document.querySelector('.max-w-sm').innerHTML = `
+          <div class="text-center text-slate-600 text-sm">
+            <p class="font-bold text-amber-700 mb-2">Supabase belum dikonfigurasi</p>
+            <p>Isi <code>assets/config.js</code> dengan URL & anon key project Supabase Anda,
+            lalu jalankan <code>supabase/schema.sql</code>. Panduan lengkap ada di
+            <code>docs/SETUP_SUPABASE_WEB.md</code>.</p>
+          </div>`;
+        return;
+      }
+
+      // Jika sudah login, langsung ke dashboard.
+      const { data } = await window.supabaseClient.auth.getSession();
+      if (data.session) {
+        window.location.href = 'dashboard.html';
+      }
+    })();
+
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const errorEl = document.getElementById('errorMsg');
+      const btn = document.getElementById('loginBtn');
+
+      errorEl.classList.add('hidden');
+      btn.disabled = true;
+      btn.textContent = 'Memproses...';
+
+      const { error } = await window.supabaseClient.auth.signInWithPassword({ email, password });
+
+      if (error) {
+        errorEl.textContent = 'Login gagal: ' + error.message;
+        errorEl.classList.remove('hidden');
+        btn.disabled = false;
+        btn.textContent = 'Masuk';
+        return;
+      }
+
+      window.location.href = 'dashboard.html';
+    });
+  </script>
+</body>
+</html>

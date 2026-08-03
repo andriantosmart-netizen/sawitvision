@@ -12,6 +12,7 @@ class SettingsService {
   static const _kOcclusionFactor = 'occlusion_factor';
   static const _kFraksiThresholds = 'fraksi_thresholds';
   static const _kDefaultUkuran = 'default_ukuran_janjang';
+  static const _kTfliteConfidence = 'tflite_confidence_threshold';
 
   // Sinkronisasi cloud (opsional)
   static const _kCompanyId = 'sync_company_id';
@@ -39,6 +40,23 @@ class SettingsService {
   Future<void> setOcclusionFactor(double value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_kOcclusionFactor, value);
+  }
+
+  /// Ambang confidence minimum untuk mode "Model Custom (TFLite)" -- deteksi
+  /// di bawah nilai ini dibuang sebelum ditampilkan/dihitung. Default 0.35
+  /// dipilih berdasarkan pengujian nyata model YOLO26n hasil training
+  /// pertama (2026-08-03): sebagian besar deteksi asli tersebar di kisaran
+  /// confidence 0.3-0.9an, sedangkan di bawah ~0.3 mulai banyak deteksi palsu
+  /// (mis. menandai perkakas/tanah kosong sebagai janjang). Sesuaikan di sini
+  /// kalau lapangan menemukan terlalu banyak/kurang deteksi.
+  Future<double> getTfliteConfidenceThreshold() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getDouble(_kTfliteConfidence) ?? 0.35;
+  }
+
+  Future<void> setTfliteConfidenceThreshold(double value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_kTfliteConfidence, value);
   }
 
   Future<UkuranJanjang> getDefaultUkuran() async {

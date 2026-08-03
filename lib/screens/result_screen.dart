@@ -57,6 +57,7 @@ class _ResultScreenState extends State<ResultScreen> {
     _ukuran = await _settings.getDefaultUkuran();
     final occlusion = await _settings.getOcclusionFactor();
     final engine = await _settings.getEngine();
+    final tfliteConfidence = await _settings.getTfliteConfidenceThreshold();
 
     final bytes = await File(widget.imagePath).readAsBytes();
 
@@ -64,7 +65,10 @@ class _ResultScreenState extends State<ResultScreen> {
     String? fallbackNote;
 
     if (engine == DetectionEngine.tflite) {
-      final tflite = TfliteDetectionService();
+      final tflite = TfliteDetectionService(
+        occlusionFactor: occlusion,
+        confidenceThreshold: tfliteConfidence,
+      );
       try {
         final result = await tflite.detect(imageBytes: bytes, mode: widget.mode);
         setState(() {

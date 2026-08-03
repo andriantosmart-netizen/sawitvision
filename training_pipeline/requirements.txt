@@ -1,5 +1,22 @@
-ultralytics>=8.2.0
-tensorflow>=2.16.0
-scikit-learn>=1.4.0
+# Dependency untuk melatih model deteksi custom (Janjang/Brondol/Janjang Kosong).
+# Jalankan di KOMPUTER/LAPTOP Anda sendiri (BUKAN di HP, dan idealnya bukan di sandbox cloud
+# Claude -- training butuh GPU untuk waktu yang wajar; lihat README.md bagian "Training butuh GPU").
+#
+#   pip install -r requirements.txt
+#
+# Catatan versi: YOLO26 (dipakai default oleh train_yolov8.py, lihat --model) baru dirilis
+# Ultralytics Januari 2026 -- pastikan paket "ultralytics" TERBARU, bukan versi lama yang mungkin
+# sudah ter-cache di komputer Anda:
+#   pip install -U ultralytics
+
+ultralytics>=8.4       # naikkan batas bawah kalau `pip install -U` menaruh versi lebih baru -- yang
+                        # penting mendukung 'yolo26n.pt' (cek: python -c "from ultralytics import YOLO; YOLO('yolo26n.pt')")
+torch>=2.2              # PyTorch -- `pip install -U ultralytics` biasanya menariknya otomatis;
+                        # kalau py komputer Anda punya GPU NVIDIA, install versi CUDA-nya dulu dari
+                        # https://pytorch.org/get-started/locally/ SEBELUM install ultralytics,
+                        # supaya torch yang kepasang sudah versi GPU (bukan CPU-only).
 pyyaml>=6.0
-pillow>=10.3.0
+Pillow>=10.0
+tensorflow>=2.16.0      # dipakai export_to_tflite.py (langkah 5) -- ultralytics akan menariknya
+                        # otomatis saat pertama kali export kalau belum ada, tapi lebih rapi
+                        # dipasang di awal sekalian.
