@@ -97,9 +97,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     color: AppColors.accent,
                   ),
                   StatCard(
-                    label: 'Kondisi Ideal',
-                    value: '${s['idealCount']}',
-                    icon: Icons.verified,
+                    label: 'Kg Brondol',
+                    value: '${((s['totalBrondolKg'] as double?) ?? 0).toStringAsFixed(1)}',
+                    icon: Icons.scale,
                     color: Colors.green.shade700,
                   ),
                 ],
@@ -148,7 +148,7 @@ class _HomeScreenState extends State<HomeScreen> {
             _ModeButton(
               icon: Icons.grain,
               title: 'Taksasi Brondol',
-              subtitle: 'Estimasi jumlah brondol & fraksi kematangan',
+              subtitle: 'Hitung tumpukan brondol & konversi ke kilogram',
               color: AppColors.accent,
               onTap: () => Navigator.pushNamed(context, '/scan',
                   arguments: ScanMode.brondol),

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../config/supabase_config.dart';
-import '../models/fraksi.dart';
 import '../services/settings_service.dart';
 import '../services/supabase_service.dart';
 import '../services/sync_service.dart';
@@ -24,7 +23,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   DetectionEngine _engine = DetectionEngine.cvKlasik;
   double _occlusionFactor = 1.4;
   double _tfliteConfidence = 0.35;
-  UkuranJanjang _ukuran = UkuranJanjang.sedang;
 
   bool _deviceRegistered = false;
   bool _autoSync = true;
@@ -49,7 +47,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final engine = await _settings.getEngine();
     final factor = await _settings.getOcclusionFactor();
     final tfliteConfidence = await _settings.getTfliteConfidenceThreshold();
-    final ukuran = await _settings.getDefaultUkuran();
     final registered = await _settings.isDeviceRegistered();
     final autoSync = await _settings.getAutoSyncEnabled();
     final lastSync = await _settings.getLastSyncAt();
@@ -60,7 +57,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _engine = engine;
       _occlusionFactor = factor;
       _tfliteConfidence = tfliteConfidence;
-      _ukuran = ukuran;
       _deviceRegistered = registered;
       _autoSync = autoSync;
       _lastSyncAt = lastSync;
@@ -198,20 +194,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onChangeEnd: (v) => _settings.setOcclusionFactor(v),
                 ),
                 Text('Faktor saat ini: ${_occlusionFactor.toStringAsFixed(2)}x'),
-                const Divider(height: 32),
-                const Text('Ukuran Janjang Default',
-                    style: TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 4),
-                SegmentedButton<UkuranJanjang>(
-                  segments: UkuranJanjang.values
-                      .map((u) => ButtonSegment(value: u, label: Text(u.label)))
-                      .toList(),
-                  selected: {_ukuran},
-                  onSelectionChanged: (s) async {
-                    setState(() => _ukuran = s.first);
-                    await _settings.setDefaultUkuran(s.first);
-                  },
-                ),
                 const Divider(height: 32),
                 const Text('Sinkronisasi Cloud (Opsional)',
                     style: TextStyle(fontWeight: FontWeight.w600)),

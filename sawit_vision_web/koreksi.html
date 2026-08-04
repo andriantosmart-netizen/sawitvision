@@ -6,6 +6,18 @@
   <title>Koreksi & Bounding Box — SawitVision</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- LiteRT.js (runtime WASM untuk menjalankan model YOLO26n .tflite langsung di browser, tanpa
+       konversi format apapun -- lihat panel "Pengaturan & Deteksi Otomatis YOLO26n" di bawah).
+       Import map ini dibaca browser 1 kali di awal & tetap berlaku untuk import() dinamis yang
+       dipanggil belakangan dari script utama (dipicu tombol), tidak perlu script ber-type="module". -->
+  <script type="importmap">
+  {
+    "imports": {
+      "@litertjs/core": "https://cdn.jsdelivr.net/npm/@litertjs/core@2.5.2/dist/index.js",
+      "@litertjs/wasm-utils": "https://cdn.jsdelivr.net/npm/@litertjs/wasm-utils@2.5.3/dist/index.js"
+    }
+  }
+  </script>
   <style>
     #canvasWrap { touch-action: none; }
     .box-janjang { border-color: #2E7D32; }
@@ -380,128 +392,66 @@
           </p>
         </div>
 
-        <div class="bg-white p-4 rounded-xl shadow-sm">
-          <button id="calPanelToggle" class="w-full flex items-center justify-between text-xs font-semibold text-slate-600">
-            <span>Deteksi Otomatis Berdasarkan Karakteristik Object (Lanjutan, Jarang Dipakai)</span>
-            <span id="calPanelChevron" class="text-slate-400">▸</span>
-          </button>
-          <div id="calPanelBody" class="hidden space-y-3 mt-3">
+        <div class="bg-white p-4 rounded-xl shadow-sm space-y-3">
+          <h3 class="text-xs font-semibold text-slate-600">🤖 Pengaturan &amp; Deteksi Otomatis YOLO26n</h3>
           <p class="help-text hidden-by-default text-[11px] text-slate-500">
-            Untuk <strong>Janjang</strong>: TIDAK lagi mengandalkan warna buah (gampang keliru saat
-            tandan bertumpuk/saling menempel). Deteksinya 2 tahap berdasarkan ciri object: (1) cari
-            <strong>bekas tangkai yang dipotong</strong> (krem/pucat &amp; cerah) sebagai pemicu awal
-            — 1 bekas tangkai = 1 tandan, lalu (2) area itu <strong>diperluas otomatis ke badan
-            buahnya</strong> (merah-oranye) supaya kotaknya menutup tandan utuh, bukan cuma lingkaran
-            kecil bekas tangkainya. Untuk <strong>Brondol</strong> tetap pakai warna buah matang
-            (oranye-kemerahan) — brondol tidak punya "bekas tangkai" tersendiri jadi warna tetap
-            ciri paling praktis untuk itu.
+            Model AI custom (YOLO26n) hasil training sendiri — sama persis dengan model yang dipakai
+            di aplikasi mobile SawitVision. Berjalan LANGSUNG di browser ini (foto tidak dikirim ke
+            server manapun). Pilih file model (.tflite) sekali di HP/komputer ini, atur ambang
+            keyakinan kalau perlu, lalu jalankan untuk foto yang sedang dibuka atau terapkan
+            sekaligus ke semua foto yang belum diverifikasi.
           </p>
-          <div class="flex gap-2">
-            <button id="calTargetJanjang" class="flex-1 text-xs rounded-lg px-2 py-1.5 border-2 border-violet-700 bg-violet-700 text-white">
-              Target: Janjang (Bekas Tangkai → Badan Buah)
+          <div>
+            <button id="yoloPickModelBtn" type="button"
+              class="text-[11px] rounded-lg px-2 py-1.5 border border-slate-300 text-slate-600 hover:bg-slate-50">
+              📎 Pilih File Model (.tflite)
             </button>
-            <button id="calTargetBrondol" class="flex-1 text-xs rounded-lg px-2 py-1.5 border-2 border-violet-700 text-violet-700">
-              Target: Brondol (Warna)
-            </button>
-          </div>
-
-          <div class="bg-violet-50 border border-violet-200 rounded-lg p-2.5 space-y-1.5">
-            <label class="flex items-center gap-2 text-[11px] font-medium text-violet-900">
-              <input id="calObjectBasedToggle" type="checkbox" checked class="rounded" />
-              🎯 Hitung berdasarkan OBJECT (pakai foto terverifikasi sebagai referensi ukuran), bukan cuma warna
-            </label>
-            <p class="help-text hidden-by-default text-[11px] text-violet-800">
-              Kalau 1 blok warna ternyata jauh lebih besar dari ukuran objek referensi (tandan/tumpukan
-              yang saling menempel), jumlah objek di blok itu akan DIPERKIRAKAN (luas blok ÷ luas
-              referensi) dan dipecah otomatis jadi beberapa kotak — bukan cuma dihitung 1 blob = 1
-              objek. Referensi diambil dari SEMUA foto yang sudah Anda tandai "terverifikasi" saat
-              ini juga (makin banyak & makin beragam foto terverifikasi, makin akurat perkiraannya).
-              Matikan centang ini untuk kembali ke deteksi warna murni (1 blob = 1 kotak) seperti
-              sebelumnya.
+            <input id="yoloModelInput" type="file" accept=".tflite" class="hidden" />
+            <p id="yoloModelStatus" class="text-[11px] text-slate-400 mt-1">
+              Belum ada file model dipilih (cari <code>sawit_detector.tflite</code> di folder project
+              — sama dengan yang dipakai di aplikasi mobile).
             </p>
-            <p id="calRefStatus" class="text-[11px] text-violet-700"></p>
-          </div>
-
-          <div>
-            <div class="flex justify-between text-[11px] text-slate-500">
-              <span id="calBrightnessLabel">Kecerahan minimum</span><span id="valBrightness">170</span>
-            </div>
-            <input id="calBrightness" type="range" min="0" max="255" value="180" class="w-full" />
           </div>
           <div>
             <div class="flex justify-between text-[11px] text-slate-500">
-              <span id="calSaturationLabel">Kejenuhan warna maksimum (makin kecil = makin pucat/putih)</span><span id="valSaturation">35%</span>
+              <span>Ambang keyakinan minimum</span><span id="yoloConfidenceVal">35%</span>
             </div>
-            <input id="calSaturation" type="range" min="0" max="100" value="25" class="w-full" />
-          </div>
-          <div>
-            <div class="flex justify-between text-[11px] text-slate-500">
-              <span id="calRminusBLabel">Selisih Merah−Biru minimum (bedakan dari abu-abu tanah)</span><span id="valRminusB">0</span>
-            </div>
-            <input id="calRminusB" type="range" min="-50" max="100" value="12" class="w-full" />
-          </div>
-          <div id="calGrowSliderWrap" class="hidden">
-            <div class="flex justify-between text-[11px] text-slate-500">
-              <span>Perluasan ke "badan buah" — Selisih Merah−Biru minimum</span><span id="valGrowRminusB">38</span>
-            </div>
-            <input id="calGrowRminusB" type="range" min="0" max="150" value="38" class="w-full" />
+            <input id="yoloConfidence" type="range" min="10" max="90" step="5" value="35" class="w-full" />
             <p class="help-text hidden-by-default text-[10px] text-slate-400 mt-0.5">
-              Ini ciri "badan buah" yang dipakai untuk MEMPERLUAS area dari bekas tangkai (bukan
-              untuk mencari titik awalnya). Makin kecil = makin gampang meluas ke buah yang agak
-              pucat/bayangan (resiko ikut melebar ke latar). Makin besar = perluasan lebih ketat,
-              cuma ke buah yang benar-benar merah-oranye pekat.
+              Deteksi dengan keyakinan di bawah nilai ini diabaikan. Naikkan kalau terlalu banyak
+              kotak salah/palsu muncul; turunkan kalau terlalu banyak objek yang tidak tertangkap.
+              Sama seperti pengaturan di layar Pengaturan aplikasi mobile.
             </p>
           </div>
-          <div>
-            <div class="flex justify-between text-[11px] text-slate-500">
-              <span>Ukuran objek min-maks (% luas foto)</span>
-              <span id="valArea">0.05% – 3%</span>
-            </div>
-            <div class="flex gap-2">
-              <input id="calMinArea" type="range" min="0" max="100" value="5" class="w-full" />
-              <input id="calMaxArea" type="range" min="0" max="500" value="30" class="w-full" />
-            </div>
+          <div class="grid grid-cols-1 gap-2 pt-1">
+            <button id="yoloRunCurrentBtn" class="text-xs rounded-lg px-3 py-2 bg-violet-700 text-white">
+              🤖 Jalankan YOLO26n — Foto Ini
+            </button>
+            <button id="yoloRunAllBtn" class="text-xs rounded-lg px-3 py-2 border border-emerald-600 text-emerald-700 hover:bg-emerald-50">
+              ⚡ Terapkan ke SEMUA Foto (belum diverifikasi)
+            </button>
           </div>
+          <p id="yoloStatus" class="text-[11px] text-slate-400"></p>
+        </div>
 
-          <div class="grid grid-cols-2 gap-2 pt-1">
-            <button id="calPreviewBtn" class="text-xs rounded-lg px-3 py-2 border border-violet-600 text-violet-700 hover:bg-violet-50">
-              🔍 Pratinjau di Foto Ini
-            </button>
-            <button id="calApplyBtn" disabled class="text-xs rounded-lg px-3 py-2 bg-violet-700 text-white disabled:opacity-40">
-              ✓ Terapkan ke Foto Ini
-            </button>
-            <button id="calApplyAllBtn" class="text-xs rounded-lg px-3 py-2 border border-slate-300 hover:bg-slate-50 col-span-2">
-              ⚡ Terapkan ke SEMUA Foto Termuat (pakai setelan ini)
-            </button>
-            <button id="calApplyBothBtn" class="text-xs rounded-lg px-3 py-2 border border-emerald-600 text-emerald-700 hover:bg-emerald-50 col-span-2">
-              🧠 Deteksi Pintar: Janjang ATAU Brondol sesuai jenis foto (foto ini)
-            </button>
-            <button id="calApplyAllBothBtn" class="text-xs rounded-lg px-3 py-2 border border-emerald-600 text-emerald-700 hover:bg-emerald-50 col-span-2">
-              🧠 Deteksi Pintar: Janjang ATAU Brondol sesuai jenis foto (SEMUA foto belum terverifikasi)
-            </button>
+        <div class="bg-white p-4 rounded-xl shadow-sm space-y-2">
+          <h3 class="text-xs font-semibold text-slate-600">🧩 Perkiraan Janjang Tertutup (Bershaf)</h3>
+          <p class="help-text hidden-by-default text-[11px] text-slate-500">
+            Untuk tandan yang disusun berbaris ke belakang (bershaf) &amp; sebagian tertutup tandan
+            di depannya sehingga tidak lolos deteksi biasa (baik manual maupun YOLO26n). Memakai
+            kotak Janjang yang SUDAH ADA di foto ini sebagai acuan ukuran, lalu menandai sisa area
+            "badan buah" di sekitarnya sebagai KANDIDAT (kotak putus-putus abu-abu) — SELALU perlu
+            diperiksa &amp; diterima manual, tidak pernah otomatis masuk hitungan.
+          </p>
+          <div class="grid grid-cols-2 gap-2">
             <button id="calBershafBtn" class="text-xs rounded-lg px-3 py-2 border border-amber-600 text-amber-700 hover:bg-amber-50 col-span-2">
               🧩 Perkirakan Janjang Tertutup (Bershaf) — foto ini
             </button>
             <button id="calBershafApplyBtn" disabled class="text-xs rounded-lg px-3 py-2 bg-amber-600 text-white disabled:opacity-40 col-span-2">
               ✓ Terima Semua Perkiraan Bershaf
             </button>
-            <p class="help-text hidden-by-default text-[10px] text-slate-400 col-span-2 -mt-1">
-              Untuk tandan yang disusun berbaris ke belakang (bershaf) & sebagian tertutup tandan
-              di depannya sehingga tidak lolos deteksi biasa. Memakai kotak Janjang yang SUDAH ADA
-              di foto ini sebagai acuan ukuran, lalu menandai sisa area "badan buah" di sekitarnya
-              sebagai KANDIDAT (kotak putus-putus abu-abu) -- SELALU perlu diperiksa & diterima
-              manual, tidak pernah otomatis masuk hitungan.
-            </p>
-            <button id="calExportBtn" class="text-[11px] rounded-lg px-2 py-1.5 border border-slate-200 text-slate-500 hover:bg-slate-50">
-              Simpan Setelan
-            </button>
-            <label class="text-[11px] rounded-lg px-2 py-1.5 border border-slate-200 text-slate-500 hover:bg-slate-50 text-center cursor-pointer">
-              Muat Setelan
-              <input id="calImportInput" type="file" accept="application/json" class="hidden" />
-            </label>
           </div>
-          <p id="calStatus" class="text-[11px] text-slate-400"></p>
-          </div>
+          <p id="bershafStatus" class="text-[11px] text-slate-400"></p>
         </div>
 
         <div class="bg-white p-4 rounded-xl shadow-sm space-y-2">
@@ -708,18 +658,7 @@
     let selectedBoxIdx = null; // index kotak yang sedang dipilih (tampilkan gagang geser/resize)
     let interaction = null; // {type:'move'|'resize', idx, handle, startPointer:{x,y}, orig:{x,y,width,height}} — drag berjalan
 
-    // --- Deteksi Otomatis (Bisa Disetel) ---------------------------------
-    // Brondol tetap warna oranye-kemerahan matang (mirip cv_detection_service.dart) — brondol
-    // tidak punya "bekas tangkai" tersendiri jadi warna tetap ciri paling praktis untuk itu.
-    let calProfiles = {
-      // minAreaSlider dinaikkan 2 -> 50 (2026-08-02, revisi ke-5) atas masukan pengguna: Brondol
-      // yang dihitung adalah TUMPUKAN (bukan 1 butir lepas) -- diukur dari 84 kotak Brondol yang
-      // sudah diverifikasi manusia, tumpukan asli TERKECIL luasnya 0.82% dari luas foto, sedangkan
-      // ambang lama (0.02%) 41x lebih kecil dari itu, jadi meloloskan kandidat yang jelas jauh
-      // lebih kecil dari 1 tumpukan asli manapun (kemungkinan 1 butir lepas atau noise warna).
-      // 50 -> minAreaRatio 0.5%, sedikit di bawah tumpukan terkecil yang pernah diverifikasi.
-      brondol: { brightnessMin: 100, saturationMax: 100, rMinusBMin: 40, minAreaSlider: 50, maxAreaSlider: 10 },
-    };
+    // --- Ciri object untuk Janjang (dipakai Bershaf) ----------------------
     // Janjang: dihapus dari deteksi warna murni (2026-08-02, permintaan pengguna — warna buah
     // gampang keliru saat tandan bertumpuk/saling menempel). Diganti deteksi 2 tahap berdasarkan
     // CIRI OBJECT, lihat detectJanjangByStemScar() di bawah: (1) SEED — cari bekas tangkai yang
@@ -801,8 +740,6 @@
       maxTextureAnisotropy: 1.0,
       minTextureEdgePixels: 20, // minimum piksel bertepi-kuat dalam region sebelum skor tekstur dipercaya
     };
-    let calTarget = 'janjang';
-    let previewBoxes = [];
     // Kandidat "bershaf" (perkiraan tandan tersembunyi/tertutup) untuk foto yang sedang dibuka --
     // lihat estimateBershafCandidates(). Selalu direset saat ganti foto/target, sama seperti
     // previewBoxes, supaya kandidat foto lama tidak nyangkut di foto baru.
@@ -810,98 +747,6 @@
     // Kalibrasi Brondol: jumlah final = banyaknya tumpukan (kotak oranye) x berat/tumpukan (kg).
     let brdPileWeightKg = 5;
 
-    // Profile yang sedang aktif di panel, sesuai target yang dipilih (Janjang -> ciri object 2
-    // tahap, Brondol -> warna murni seperti sebelumnya).
-    function activeCalProfile() {
-      return calTarget === 'brondol' ? calProfiles.brondol : janjangCharProfile;
-    }
-    // 3 slider warna di panel (kecerahan/kejenuhan/selisih R-B) dipakai bersama oleh kedua target,
-    // tapi mengarah ke field yang berbeda: untuk Brondol itu ciri warna buahnya langsung, untuk
-    // Janjang itu ciri SEED (bekas tangkai) — bukan ciri badan buah, yang punya slider sendiri
-    // (calGrowRminusB) supaya tidak tertukar/tumpang tindih maknanya.
-    function calFieldMap() {
-      return calTarget === 'brondol'
-        ? { brightness: 'brightnessMin', saturation: 'saturationMax', rMinusB: 'rMinusBMin' }
-        : { brightness: 'seedBrightnessMin', saturation: 'seedSaturationMax', rMinusB: 'seedRMinusBMin' };
-    }
-
-    function calRatios(p) {
-      return { minAreaRatio: p.minAreaSlider / 10000, maxAreaRatio: p.maxAreaSlider / 1000 };
-    }
-
-    function calSyncSlidersFromProfile() {
-      const p = activeCalProfile();
-      const fm = calFieldMap();
-      document.getElementById('calBrightness').value = p[fm.brightness];
-      document.getElementById('calSaturation').value = p[fm.saturation];
-      document.getElementById('calRminusB').value = p[fm.rMinusB];
-      document.getElementById('calMinArea').value = p.minAreaSlider;
-      document.getElementById('calMaxArea').value = p.maxAreaSlider;
-      const growWrap = document.getElementById('calGrowSliderWrap');
-      const isJanjang = calTarget !== 'brondol';
-      growWrap.classList.toggle('hidden', !isJanjang);
-      if (isJanjang) document.getElementById('calGrowRminusB').value = p.growRMinusBMin;
-      document.getElementById('calBrightnessLabel').textContent = isJanjang
-        ? 'Ciri SEED (bekas tangkai) — kecerahan minimum'
-        : 'Kecerahan minimum';
-      document.getElementById('calSaturationLabel').textContent = isJanjang
-        ? 'Ciri SEED (bekas tangkai) — kejenuhan warna maksimum'
-        : 'Kejenuhan warna maksimum (makin kecil = makin pucat/putih)';
-      document.getElementById('calRminusBLabel').textContent = isJanjang
-        ? 'Ciri SEED (bekas tangkai) — selisih Merah−Biru minimum'
-        : 'Selisih Merah−Biru minimum (bedakan dari abu-abu tanah)';
-      calUpdateLabels();
-    }
-
-    function calUpdateLabels() {
-      const p = activeCalProfile();
-      const fm = calFieldMap();
-      document.getElementById('valBrightness').textContent = p[fm.brightness];
-      document.getElementById('valSaturation').textContent = p[fm.saturation] + '%';
-      document.getElementById('valRminusB').textContent = p[fm.rMinusB];
-      if (calTarget !== 'brondol') {
-        document.getElementById('valGrowRminusB').textContent = p.growRMinusBMin;
-      }
-      const { minAreaRatio, maxAreaRatio } = calRatios(p);
-      document.getElementById('valArea').textContent =
-        `${(minAreaRatio * 100).toFixed(2)}% – ${(maxAreaRatio * 100).toFixed(2)}%`;
-    }
-
-    ['calBrightness', 'calSaturation', 'calRminusB', 'calMinArea', 'calMaxArea', 'calGrowRminusB'].forEach((id) => {
-      document.getElementById(id).addEventListener('input', (e) => {
-        const p = activeCalProfile();
-        const fm = calFieldMap();
-        const v = parseFloat(e.target.value);
-        if (id === 'calBrightness') p[fm.brightness] = v;
-        if (id === 'calSaturation') p[fm.saturation] = v;
-        if (id === 'calRminusB') p[fm.rMinusB] = v;
-        if (id === 'calMinArea') p.minAreaSlider = v;
-        if (id === 'calMaxArea') p.maxAreaSlider = v;
-        if (id === 'calGrowRminusB' && calTarget !== 'brondol') p.growRMinusBMin = v;
-        calUpdateLabels();
-      });
-    });
-
-    function calSetTarget(next) {
-      calTarget = next;
-      const jBtn = document.getElementById('calTargetJanjang');
-      const bBtn = document.getElementById('calTargetBrondol');
-      const activeCls = 'flex-1 text-xs rounded-lg px-2 py-1.5 border-2 border-violet-700 bg-violet-700 text-white';
-      const idleCls = 'flex-1 text-xs rounded-lg px-2 py-1.5 border-2 border-violet-700 text-violet-700';
-      jBtn.className = next === 'janjang' ? activeCls : idleCls;
-      bBtn.className = next === 'brondol' ? activeCls : idleCls;
-      previewBoxes = [];
-      bershafCandidates = [];
-      document.getElementById('calApplyBtn').disabled = true;
-      const bershafApplyBtnEl = document.getElementById('calBershafApplyBtn');
-      if (bershafApplyBtnEl) bershafApplyBtnEl.disabled = true;
-      calSyncSlidersFromProfile();
-      updateCalRefStatus();
-      drawFrame();
-    }
-    document.getElementById('calTargetJanjang').addEventListener('click', () => calSetTarget('janjang'));
-    document.getElementById('calTargetBrondol').addEventListener('click', () => calSetTarget('brondol'));
-    document.getElementById('calObjectBasedToggle').addEventListener('change', updateCalRefStatus);
 
     // Rona (hue, 0-360) dari RGB -- dipakai gerbang HUE+saturasi di isFruitBodyPixelForProfile
     // (awalnya closure di dalam detectJanjangByStemScar, diekstrak jadi top-level 2026-08-03 supaya
@@ -933,411 +778,6 @@
       return huePass;
     }
 
-    /** Sama persis logikanya dengan cv_detection_service.dart / auto_annotate_cv.py:
-     * resize ke lebar kerja tetap, klasifikasi tiap piksel, lalu connected-component
-     * (flood fill) + filter ukuran blob. Bedanya di sini kriteria warnanya BISA DISETEL
-     * lewat slider (brightness/saturation/selisih R-B), bukan warna buah yang dihardcode. */
-    function detectBlobs(imgEl, profile) {
-      const { minAreaRatio, maxAreaRatio } = calRatios(profile);
-      const workW = 400;
-      const aspect = imgEl.naturalHeight / imgEl.naturalWidth;
-      const workH = Math.max(1, Math.round(workW * aspect));
-      const off = document.createElement('canvas');
-      off.width = workW;
-      off.height = workH;
-      const octx = off.getContext('2d');
-      octx.drawImage(imgEl, 0, 0, workW, workH);
-      const data = octx.getImageData(0, 0, workW, workH).data;
-      const w = workW, h = workH;
-      const n = w * h;
-      const mask = new Uint8Array(n);
-      // pixelFit[i] = 0..1, seberapa KUAT piksel ini cocok ciri warna (bukan cuma lolos/tidak
-      // lolos threshold seperti mask[]) — dipakai attachConfidence() di bawah untuk menghitung
-      // %keyakinan per kotak kandidat di panel preview. Ditambahkan 2026-08-02.
-      const pixelFit = new Float32Array(n);
-      for (let i = 0; i < n; i++) {
-        const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2];
-        const maxc = Math.max(r, g, b), minc = Math.min(r, g, b);
-        const brightness = (r + g + b) / 3;
-        const sat = maxc > 0 ? (maxc - minc) / maxc : 0;
-        const pass =
-          brightness >= profile.brightnessMin &&
-          sat * 100 <= profile.saturationMax &&
-          r - b >= profile.rMinusBMin;
-        mask[i] = pass ? 1 : 0;
-        if (pass) {
-          const mBright = Math.max(0, Math.min(1, (brightness - profile.brightnessMin) / 40));
-          const mSat = Math.max(0, Math.min(1, (profile.saturationMax - sat * 100) / 40));
-          const mRB = Math.max(0, Math.min(1, (r - b - profile.rMinusBMin) / 40));
-          pixelFit[i] = (mBright + mSat + mRB) / 3;
-        }
-      }
-      const visited = new Uint8Array(n);
-      const minPx = n * minAreaRatio;
-      const maxPx = n * maxAreaRatio;
-      const boxes = [];
-      for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-          const idx = y * w + x;
-          if (visited[idx]) continue;
-          visited[idx] = 1;
-          if (!mask[idx]) continue;
-          const stack = [idx];
-          let minX = x, maxX = x, minY = y, maxY = y, count = 0, fitSum = 0;
-          while (stack.length) {
-            const cur = stack.pop();
-            const cy = (cur / w) | 0;
-            const cx = cur % w;
-            count++;
-            fitSum += pixelFit[cur];
-            if (cx < minX) minX = cx;
-            if (cx > maxX) maxX = cx;
-            if (cy < minY) minY = cy;
-            if (cy > maxY) maxY = cy;
-            const neigh = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-            for (const [dx, dy] of neigh) {
-              const nx = cx + dx, ny = cy + dy;
-              if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
-              const nIdx = ny * w + nx;
-              if (visited[nIdx]) continue;
-              visited[nIdx] = 1;
-              if (mask[nIdx]) stack.push(nIdx);
-            }
-          }
-          if (count >= minPx && count <= maxPx) {
-            // areaFrac = luas blob SEBENARNYA (jumlah piksel warna, bukan luas kotak pembungkus)
-            // sebagai fraksi luas foto — dipakai oleh splitOversizedBlobs() untuk memperkirakan
-            // apakah 1 blob ini sebenarnya berisi LEBIH dari 1 objek yang saling menempel.
-            boxes.push({
-              x: minX / w,
-              y: minY / h,
-              width: (maxX - minX + 1) / w,
-              height: (maxY - minY + 1) / h,
-              areaFrac: count / n,
-              colorScore: count > 0 ? fitSum / count : 0,
-            });
-          }
-        }
-      }
-      boxes.sort((a, b) => b.width * b.height - a.width * a.height);
-      return boxes.slice(0, 80);
-    }
-
-    /** Deteksi Janjang 2 TAHAP berdasarkan ciri object (bukan warna buah murni), sesuai
-     * permintaan pengguna 2026-08-02:
-     *   1) SEED — connected-component piksel yang cocok ciri "bekas potongan tangkai" (krem/
-     *      pucat & cerah, lihat janjangCharProfile.seed*). Tiap cluster = pemicu 1 tandan.
-     *   2) GROW — dari tiap cluster seed, flood-fill ke piksel tetangga yang cocok ciri "badan
-     *      buah" (merah-oranye pekat, janjangCharProfile.grow*) ATAU masih ciri bekas tangkai,
-     *      KECUALI piksel "membosankan" (tanah/rumput/langit — pakai isBoringBlock yang sama
-     *      dengan fitur cek duplikat, supaya tanah tidak pernah ikut jadi bagian objek).
-     * Cluster seed yang lebih besar diproses lebih dulu & piksel yang sudah "diklaim" 1 tandan
-     * tidak bisa direbut tandan lain (globalClaimed) — supaya tandan yang saling berdempetan
-     * tetap terpisah jadi kotak masing-masing, bukan menyatu jadi 1 kotak raksasa. Beroperasi di
-     * kanvas kerja 400px sama seperti detectBlobs supaya areaFrac tetap kompatibel dengan
-     * computeObjectReferenceProfile()/splitOversizedBlobs() di bawah (tidak perlu diubah). */
-    function detectJanjangByStemScar(imgEl, profile) {
-      const workW = 400;
-      const aspect = imgEl.naturalHeight / imgEl.naturalWidth;
-      const workH = Math.max(1, Math.round(workW * aspect));
-      const off = document.createElement('canvas');
-      off.width = workW;
-      off.height = workH;
-      const octx = off.getContext('2d');
-      octx.drawImage(imgEl, 0, 0, workW, workH);
-      const data = octx.getImageData(0, 0, workW, workH).data;
-      const w = workW, h = workH;
-      const n = w * h;
-
-      // --- Ciri TEKSTUR (2026-08-02, revisi ke-3, atas masukan pengguna) -- BUKAN warna sama
-      // sekali. Latar kayu/batu pucat bisa punya statistik warna (cerah, agak kemerahan) yang
-      // nyaris identik dengan kulit buah matang -- terbukti gerbang bodyFrac/regionFill di atas
-      // (yang masih berbasis warna) tidak mempan di kasus itu. Buah sawit bergerindil (puluhan
-      // buah kecil bulat menempel) sehingga pola kontras lokalnya TERSEBAR ke segala arah
-      // (isotropik); urat/serat kayu polanya condong ke 1 arah dominan (anisotropik) walau
-      // warnanya mirip. Dihitung lewat gradien Sobel per piksel, arah tepi (mod 180 derajat,
-      // memakai sudut ganda 2*theta supaya statistik arah sirkular tidak bias) diakumulasi HANYA
-      // untuk piksel dengan kontras cukup kuat (di bawah TEXTURE_EDGE_MIN_MAG dianggap area rata,
-      // tidak membawa info arah apa pun, diabaikan). "Panjang resultan" hasilnya (0-1) dipakai
-      // sebagai skor keselarasan arah per region di bawah: dekat 1 = sangat searah (curiga kayu),
-      // dekat 0 = tersebar acak (ciri gerindil buah asli).
-      const TEXTURE_EDGE_MIN_MAG = 18;
-      const gray = new Float32Array(n);
-      for (let i = 0; i < n; i++) {
-        gray[i] = (data[i * 4] + data[i * 4 + 1] + data[i * 4 + 2]) / 3;
-      }
-      const gradMag = new Float32Array(n);
-      const gradCos2 = new Float32Array(n);
-      const gradSin2 = new Float32Array(n);
-      for (let y = 1; y < h - 1; y++) {
-        for (let x = 1; x < w - 1; x++) {
-          const idx = y * w + x;
-          const tl = gray[idx - w - 1], tc = gray[idx - w], tr = gray[idx - w + 1];
-          const ml = gray[idx - 1], mr = gray[idx + 1];
-          const bl = gray[idx + w - 1], bc = gray[idx + w], br = gray[idx + w + 1];
-          const gx = -tl + tr - 2 * ml + 2 * mr - bl + br;
-          const gy = -tl - 2 * tc - tr + bl + 2 * bc + br;
-          const mag = Math.sqrt(gx * gx + gy * gy);
-          if (mag > TEXTURE_EDGE_MIN_MAG) {
-            const theta2 = 2 * Math.atan2(gy, gx);
-            gradMag[idx] = mag;
-            gradCos2[idx] = mag * Math.cos(theta2);
-            gradSin2[idx] = mag * Math.sin(theta2);
-          }
-        }
-      }
-      /** Skor keselarasan arah tepi (0-1) untuk 1 kumpulan indeks piksel -- lihat catatan di atas.
-       * Mengembalikan null kalau piksel bertepi-kuatnya terlalu sedikit untuk dipercaya (bukan 0,
-       * supaya pemanggil tahu ini "tidak cukup data", bukan "terbukti isotropik"). */
-      function textureAnisotropyOf(indices) {
-        let sumC = 0, sumS = 0, sumMag = 0, edgeCount = 0;
-        indices.forEach((idx) => {
-          const mag = gradMag[idx];
-          if (mag > 0) {
-            sumC += gradCos2[idx];
-            sumS += gradSin2[idx];
-            sumMag += mag;
-            edgeCount++;
-          }
-        });
-        if (edgeCount < profile.minTextureEdgePixels || sumMag === 0) return null;
-        return Math.sqrt(sumC * sumC + sumS * sumS) / sumMag;
-      }
-
-      const pixelColor = (idx) => [data[idx * 4], data[idx * 4 + 1], data[idx * 4 + 2]];
-      const isSeedPixel = ([r, g, b]) => {
-        const brightness = (r + g + b) / 3;
-        const maxc = Math.max(r, g, b), minc = Math.min(r, g, b);
-        const sat = maxc > 0 ? (maxc - minc) / maxc : 0;
-        return (
-          brightness >= profile.seedBrightnessMin &&
-          sat * 100 <= profile.seedSaturationMax &&
-          r - b >= profile.seedRMinusBMin
-        );
-      };
-      // 2026-08-03: isFruitBodyPixel/rgbToHue diekstrak jadi fungsi top-level (rgbToHueShared /
-      // isFruitBodyPixelForProfile, lihat sebelum detectBlobs) supaya bisa dipakai ulang oleh
-      // estimateBershafCandidates() tanpa duplikasi logic -- perilaku di sini TIDAK berubah sama
-      // sekali, cuma didelegasikan.
-      const isFruitBodyPixel = (rgb) => isFruitBodyPixelForProfile(rgb, profile);
-
-      const seedMask = new Uint8Array(n);
-      for (let i = 0; i < n; i++) {
-        const col = pixelColor(i);
-        // 2026-08-02: SEED sekarang juga menyaring piksel "membosankan" (tanah pucat/kayu/rumput
-        // -- isBoringBlock() yang sama dipakai tahap GROW & fitur cek duplikat). Sebelumnya
-        // isBoringBlock cuma dicek di GROW, jadi papan kayu/batu pucat yang kebetulan cerah &
-        // pucat (cocok ciri SEED) bisa lolos jadi "bekas tangkai" palsu di foto berlatar
-        // kayu/batu terang -- ditemukan saat uji 5 foto belum-terverifikasi (audit 2026-08-02).
-        if (isSeedPixel(col) && !isBoringBlock(col)) seedMask[i] = 1;
-      }
-
-      // Tahap 1: connected-component pada seedMask -> tiap cluster = 1 calon bekas tangkai.
-      const seedVisited = new Uint8Array(n);
-      const seedClusters = [];
-      for (let i = 0; i < n; i++) {
-        if (seedVisited[i] || !seedMask[i]) continue;
-        const stack = [i];
-        seedVisited[i] = 1;
-        const cluster = [];
-        while (stack.length) {
-          const cur = stack.pop();
-          cluster.push(cur);
-          const cy = (cur / w) | 0, cx = cur % w;
-          const neigh = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-          for (const [dx, dy] of neigh) {
-            const nx = cx + dx, ny = cy + dy;
-            if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
-            const nIdx = ny * w + nx;
-            if (seedVisited[nIdx] || !seedMask[nIdx]) continue;
-            seedVisited[nIdx] = 1;
-            stack.push(nIdx);
-          }
-        }
-        if (cluster.length >= 2) seedClusters.push(cluster); // buang noise 1 piksel
-      }
-
-      // 2026-08-02 (revisi ke-2, atas masukan pengguna): warna SAJA (cerah/pudar/agak merah) masih
-      // gampang keliru -- serat kayu/batu pucat punya statistik warna yang mirip. Bekas tangkai
-      // ASLI berbentuk gumpalan bulat/oval (bukan garis retakan kayu yang panjang & tipis) --
-      // dibuang di sini SEBELUM ditumbuhkan kalau bentuknya tidak masuk akal sebagai bekas
-      // tangkai: retakan kayu/urat batu cenderung panjang-tipis (aspect ratio ekstrem) & jarang
-      // mengisi kotak pembungkusnya sendiri (fill ratio rendah), beda dari bekas tangkai yang
-      // relatif mengisi penuh area bulat/ovalnya.
-      const seedClustersFiltered = seedClusters.filter((cluster) => {
-        let minX = w, maxX = 0, minY = h, maxY = 0;
-        cluster.forEach((idx) => {
-          const cy = (idx / w) | 0, cx = idx % w;
-          if (cx < minX) minX = cx;
-          if (cx > maxX) maxX = cx;
-          if (cy < minY) minY = cy;
-          if (cy > maxY) maxY = cy;
-        });
-        const bw = maxX - minX + 1, bh = maxY - minY + 1;
-        const aspect = Math.max(bw, bh) / Math.max(1, Math.min(bw, bh));
-        const fill = cluster.length / (bw * bh);
-        return aspect <= profile.seedMaxAspect && fill >= profile.seedMinFill;
-      });
-
-      // Cluster besar diproses dulu supaya bekas tangkai paling jelas "menang" merebut badan
-      // buah di sekitarnya sebelum cluster kecil/berdekatan ikut menyerobot piksel yang sama.
-      seedClustersFiltered.sort((a, b) => b.length - a.length);
-
-      // 2026-08-02 (revisi ke-5), atas masukan pengguna: "BB nya belum pas memborder Janjang per
-      // Janjang.. masih ada yang lebih dari 1 Janjang di Border nya" -- sebelumnya pemecahan blob
-      // gabungan (splitOversizedBlobs) HANYA menebak jumlah objek dari rasio luas vs referensi,
-      // tanpa tahu berapa bekas-tangkai ASLI yang sebenarnya tertelan ke 1 region (bisa terjadi
-      // saat 2+ tandan bersentuhan tanpa celah warna "membosankan" di antaranya, jadi BFS dari 1
-      // bekas tangkai tumbuh terus menelan bekas tangkai tandan sebelahnya sebelum tandan itu
-      // sempat diproses gilirannya sendiri). Lookup ini menandai tiap piksel bekas-tangkai milik
-      // cluster keberapa, supaya saat region tumbuh & "menelan" bekas tangkai cluster LAIN, itu
-      // tercatat -- containedObjectCount di bawah jadi sinyal jumlah objek yang lebih bisa
-      // dipercaya daripada cuma rasio luas, dipakai splitOversizedBlobs untuk menentukan jumlah
-      // pecahan (lihat pemakaiannya).
-      const seedClusterIdOf = new Int32Array(n).fill(-1);
-      seedClustersFiltered.forEach((cluster, ci) => {
-        cluster.forEach((idx) => { seedClusterIdOf[idx] = ci; });
-      });
-
-      const { minAreaRatio, maxAreaRatio } = calRatios(profile);
-      const minPx = n * minAreaRatio;
-      const maxPx = n * maxAreaRatio;
-      const maxGrowPx = Math.max(50, Math.round(maxPx * 1.5)); // batas aman biar BFS tidak lari ke seluruh foto
-
-      const globalClaimed = new Uint8Array(n);
-      const boxes = [];
-      seedClustersFiltered.forEach((cluster, ci) => {
-        const region = [];
-        const stack = [];
-        const localVisited = new Uint8Array(n);
-        // Map bukan Set: hitung BERAPA piksel dari tiap cluster LAIN yang ikut tertelan, bukan
-        // cuma ya/tidak -- region yang cuma menyentuh 1-2 piksel tepi bekas-tangkai tetangga
-        // (wajar di tumpukan padat, bukan berarti tandan tetangga itu benar-benar tertelan utuh)
-        // TIDAK boleh dihitung sebagai "1 objek tambahan" -- baru dihitung kalau SEBAGIAN BESAR
-        // (>=50%) piksel bekas-tangkai cluster itu ikut terserap. Revisi setelah uji awal (tanpa
-        // ambang ini) ternyata over-trigger besar-besaran: 24x lebih banyak blob "dipecah"
-        // dibanding sebelumnya, karena hampir tiap tandan di tumpukan padat bersinggungan dengan
-        // tepi bekas-tangkai tetangganya walau tidak benar-benar menelannya.
-        const absorbedPixelCounts = new Map(); // otherClusterId -> jumlah piksel tertelan
-        cluster.forEach((idx) => {
-          if (globalClaimed[idx]) return;
-          localVisited[idx] = 1;
-          region.push(idx);
-          stack.push(idx);
-        });
-        if (region.length === 0) return; // seluruh cluster ini sudah diklaim tandan lain duluan
-        while (stack.length && region.length < maxGrowPx) {
-          const cur = stack.pop();
-          const cy = (cur / w) | 0, cx = cur % w;
-          const neigh = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-          for (const [dx, dy] of neigh) {
-            const nx = cx + dx, ny = cy + dy;
-            if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
-            const nIdx = ny * w + nx;
-            if (localVisited[nIdx] || globalClaimed[nIdx]) continue;
-            const col = pixelColor(nIdx);
-            if (isBoringBlock(col)) continue; // jangan serap tanah/rumput ke tandan
-            if (isFruitBodyPixel(col) || isSeedPixel(col)) {
-              const otherCid = seedClusterIdOf[nIdx];
-              if (otherCid !== -1 && otherCid !== ci) {
-                absorbedPixelCounts.set(otherCid, (absorbedPixelCounts.get(otherCid) || 0) + 1);
-              }
-              localVisited[nIdx] = 1;
-              region.push(nIdx);
-              stack.push(nIdx);
-              if (region.length >= maxGrowPx) break;
-            }
-          }
-        }
-        let absorbedOtherClusterCount = 0;
-        absorbedPixelCounts.forEach((count, otherCid) => {
-          const otherLen = seedClustersFiltered[otherCid].length;
-          if (otherLen > 0 && count / otherLen >= 0.5) absorbedOtherClusterCount++;
-        });
-        region.forEach((idx) => { globalClaimed[idx] = 1; });
-        if (region.length < minPx || region.length > maxPx) return;
-        let minX = w, maxX = 0, minY = h, maxY = 0, strongBodyCount = 0;
-        region.forEach((idx) => {
-          const cy = (idx / w) | 0, cx = idx % w;
-          if (cx < minX) minX = cx;
-          if (cx > maxX) maxX = cx;
-          if (cy < minY) minY = cy;
-          if (cy > maxY) maxY = cy;
-          // colorScore = fraksi piksel di region ini yang benar-benar "badan buah" kuat (bukan
-          // cuma bekas tangkai/seed yang ikut tumbuh minim) — box yang sebagian besar isinya
-          // badan buah kuat dianggap lebih meyakinkan sebagai 1 tandan utuh. Dipakai
-          // attachConfidence() di bawah. Ditambahkan 2026-08-02.
-          if (isFruitBodyPixel(pixelColor(idx))) strongBodyCount++;
-        });
-        // 2026-08-02 (revisi ke-2): GERBANG WAJIB, bukan cuma nilai keyakinan tampilan --
-        // (1) bodyFrac: bekas tangkai HARUS benar-benar menyatu dengan badan buah asli dalam
-        // jumlah cukup, bukan cuma tumbuh ke piksel "seed" pucat lain berulang-ulang (itu yang
-        // terjadi di latar kayu/batu pucat: tumbuh tanpa pernah menyentuh warna buah asli).
-        // (2) regionFillRatio: tandan asli relatif mengisi penuh kotak pembungkusnya sendiri --
-        // pertumbuhan yang menyebar tipis/berserakan mengikuti urat kayu/retakan batu (bukan 1
-        // gumpalan buah padat) akan px isinya jauh lebih sedikit dari luas kotaknya. Kedua ini
-        // dicek SEBELUM box dianggap valid, bukan cuma memengaruhi %keyakinan tampilan.
-        const bboxPx = (maxX - minX + 1) * (maxY - minY + 1);
-        const bodyFrac = region.length > 0 ? strongBodyCount / region.length : 0;
-        const regionFillRatio = bboxPx > 0 ? region.length / bboxPx : 0;
-        if (bodyFrac < profile.minBodyFrac || regionFillRatio < profile.minRegionFill) return;
-        // 2026-08-02 (revisi ke-3): gerbang TEKSTUR -- lihat catatan panjang di atas fungsi ini.
-        // null = piksel bertepi-kuatnya terlalu sedikit untuk dipercaya (mis. region kecil/polos),
-        // dibiarkan lolos (tidak ditolak berdasar data yang tidak cukup).
-        const textureAnisotropy = textureAnisotropyOf(region);
-        if (textureAnisotropy !== null && textureAnisotropy > profile.maxTextureAnisotropy) return;
-        boxes.push({
-          x: minX / w,
-          y: minY / h,
-          width: (maxX - minX + 1) / w,
-          height: (maxY - minY + 1) / h,
-          areaFrac: region.length / n,
-          colorScore: bodyFrac,
-          textureAnisotropy,
-          containedObjectCount: 1 + absorbedOtherClusterCount, // lihat catatan seedClusterIdOf di atas
-        });
-      });
-      boxes.sort((a, b) => b.width * b.height - a.width * a.height);
-      return boxes.slice(0, 80);
-    }
-
-    // --- Hitung berdasarkan OBJECT (referensi ukuran dari foto terverifikasi) ---------------
-    // Warna saja tidak bisa membedakan "1 tandan besar" dari "2 tandan yang saling menempel jadi
-    // 1 blob" — makanya dibuatkan referensi ukuran objek TUNGGAL per kelas (Janjang/Brondol) dari
-    // kotak-kotak yang SUDAH ANDA VERIFIKASI, lalu blob yang jauh lebih besar dari referensi itu
-    // diperkirakan berisi beberapa objek & dipecah otomatis (bukan cuma dihitung 1 blob = 1 objek).
-    const OBJECT_REF_MIN_SAMPLES = 5; // di bawah ini, referensi dianggap belum cukup andal
-    // Diturunkan dari 1.35 -> 1.15 (2026-08-02, revisi ke-4) atas masukan pengguna: "BB nya
-    // sendiri belum pas memborder Janjang per Janjang.. masih ada yang lebih dari 1 Janjang di
-    // Border nya" -- blob yang cuma 15% lebih besar dari median referensi sekarang sudah dicoba
-    // dipecah (lebih agresif), supaya tandan yang saling menempel lebih sering dipisah jadi
-    // beberapa kotak perkiraan alih-alih dibiarkan 1 kotak besar berisi >1 tandan.
-    const OBJECT_SPLIT_MARGIN = 1.15;
-    const OBJECT_SPLIT_MAX_PARTS = 8; // batas wajar per blob, jaga-jaga kalau referensi keliru kecil
-
-    function computeObjectReferenceProfile() {
-      const areasByClass = { janjang: [], brondol: [] };
-      items.forEach((it) => {
-        if (!it.verified || !Array.isArray(it.boxes)) return;
-        it.boxes.forEach((b) => {
-          if ((b.class === 'janjang' || b.class === 'brondol') && b.width > 0 && b.height > 0) {
-            areasByClass[b.class].push(b.width * b.height);
-          }
-        });
-      });
-      const profile = {};
-      ['janjang', 'brondol'].forEach((cls) => {
-        const areas = areasByClass[cls].slice().sort((a, b) => a - b);
-        if (areas.length >= OBJECT_REF_MIN_SAMPLES) {
-          const mid = Math.floor(areas.length / 2);
-          const median = areas.length % 2 ? areas[mid] : (areas[mid - 1] + areas[mid]) / 2;
-          profile[cls] = { medianArea: median, sampleCount: areas.length };
-        } else {
-          profile[cls] = null; // belum cukup kotak terverifikasi untuk kelas ini
-        }
-      });
-      return profile;
-    }
 
     // --- Estimasi "Bershaf" (2026-08-03) ------------------------------------------------------
     // Atas masukan pengguna: tandan yang disusun berbaris ke belakang (3/4/5 bershaf) sering
@@ -1478,399 +918,6 @@
       };
     }
 
-    // Pecah blob yang jauh lebih besar dari 1 objek referensi jadi beberapa kotak perkiraan
-    // (memakai slicePolygonIntoBoxes yang sama dengan fitur "Baris Janjang") — mengembalikan
-    // kotak-kotak baru (tanpa field areaFrac, siap dipakai sebagai box biasa) + berapa objek
-    // TAMBAHAN yang ditemukan dari proses pemecahan ini (untuk pesan status).
-    function splitOversizedBlobs(boxes, cls, refProfile) {
-      const ref = refProfile && refProfile[cls];
-      if (!ref) return { boxes: boxes.map(({ x, y, width, height, confidence }) => ({ x, y, width, height, confidence })), splitCount: 0, extraObjects: 0 };
-      let splitCount = 0, extraObjects = 0;
-      const out = [];
-      boxes.forEach((b) => {
-        // CATATAN (2026-08-02, revisi ke-5): sempat dicoba memakai containedObjectCount (jumlah
-        // bekas-tangkai lain yang ikut tertelan region ini, lihat seedClusterIdOf di
-        // detectJanjangByStemScar) sebagai sinyal TAMBAHAN untuk estimasi jumlah objek, dengan
-        // harapan lebih akurat dari rasio luas semata. HASIL UJI NYATA: over-trigger parah (total
-        // kotak Janjang di 494 foto naik dari ~4.800 jadi ~10.870, satu foto bahkan sampai 110
-        // kotak) -- ternyata asumsi "1 cluster bekas-tangkai = 1 tandan" TIDAK selalu benar:
-        // pantulan cahaya di permukaan buah yang mengkilap & ujung buah pucat/belum matang di
-        // DALAM 1 tandan yang sama juga bisa lolos sebagai cluster "bekas tangkai" kecil terpisah,
-        // jadi 1 tandan tunggal bisa "menelan" beberapa cluster semu yang bukan tandan tetangga
-        // sungguhan. Dikembalikan ke rasio luas SAJA (lebih konservatif tapi terbukti akurat) --
-        // containedObjectCount tetap dihitung & disimpan di kotaknya (field diagnostik) untuk
-        // penyelidikan lanjutan kalau nanti ketemu cara memisahkan "cluster asli" dari "noise".
-        const estimated = ref && b.areaFrac > 0 ? Math.round(b.areaFrac / ref.medianArea) : 1;
-        if (estimated <= 1 || b.areaFrac <= ref.medianArea * OBJECT_SPLIT_MARGIN) {
-          out.push({ x: b.x, y: b.y, width: b.width, height: b.height, confidence: b.confidence });
-          return;
-        }
-        const n = Math.min(estimated, OBJECT_SPLIT_MAX_PARTS);
-        const rectPoly = [
-          { x: b.x, y: b.y },
-          { x: b.x + b.width, y: b.y },
-          { x: b.x + b.width, y: b.y + b.height },
-          { x: b.x, y: b.y + b.height },
-        ];
-        const sliced = slicePolygonIntoBoxes(rectPoly, n);
-        if (sliced.length > 1) {
-          splitCount++;
-          extraObjects += sliced.length - 1;
-          // Kotak hasil pecah geometris ini perkiraan (bukan diukur ulang per bagian) -- turunkan
-          // sedikit keyakinannya dari kotak induk supaya kelihatan ini estimasi pemecahan, bukan
-          // deteksi langsung per bagian.
-          const splitConfidence =
-            typeof b.confidence === 'number' ? Math.max(10, Math.round(b.confidence * 0.82)) : undefined;
-          sliced.forEach((s) => out.push({ ...s, confidence: splitConfidence }));
-        } else {
-          out.push({ x: b.x, y: b.y, width: b.width, height: b.height, confidence: b.confidence }); // gagal pecah -> biarkan 1 kotak
-        }
-      });
-      return { boxes: out, splitCount, extraObjects };
-    }
-
-    /** Gabungkan colorScore (seberapa kuat piksel dalam kotak cocok ciri warna, dari detectBlobs/
-     * detectJanjangByStemScar) + kecocokan ukuran vs referensi objek terverifikasi
-     * (computeObjectReferenceProfile) jadi 1 angka %keyakinan (0-100) per kotak kandidat --
-     * ditampilkan di panel preview (mirip skor confidence pada model deteksi lain) supaya kotak
-     * yang paling perlu diperiksa manual dulu kelihatan jelas. HANYA untuk ditampilkan -- tidak
-     * dipakai memfilter/membuang kandidat (itu tetap tugas slider min/maxArea seperti biasa).
-     * Ditambahkan 2026-08-02 atas permintaan pengguna ("masukkan angka %tase keyakinan"). */
-    function attachConfidence(boxes, cls) {
-      const ref = computeObjectReferenceProfile();
-      const refForClass = ref && ref[cls];
-      return boxes.map((b) => {
-        let sizeScore = 0.72; // netral kalau referensi ukuran objek belum cukup (lihat OBJECT_REF_MIN_SAMPLES)
-        if (refForClass && b.areaFrac > 0) {
-          const ratio = b.areaFrac / refForClass.medianArea;
-          sizeScore = ratio <= 1 ? ratio : 1 / ratio;
-          sizeScore = Math.max(0, Math.min(1, sizeScore));
-        }
-        const colorScore = typeof b.colorScore === 'number' ? Math.max(0, Math.min(1, b.colorScore)) : 0.7;
-        // Bobot colorScore dinaikkan 0.5 -> 0.65 (2026-08-02, revisi ke-4): sejak gerbang
-        // HUE+saturasi ditambahkan di isFruitBodyPixel, colorScore (bodyFrac) jauh lebih bisa
-        // dipercaya sebagai sinyal "ini benar-benar buah, bukan tanah/rumput" -- sebelumnya
-        // ukuran (sizeScore) yang berbobot sama bisa "menyelamatkan" kandidat berwarna lemah
-        // (tanah/rumput yang kebetulan seukuran tandan referensi) sampai lolos ambang 50%.
-        const raw = 0.65 * colorScore + 0.35 * sizeScore;
-        const confidence = Math.round(Math.max(12, Math.min(97, raw * 100)));
-        return { ...b, confidence };
-      });
-    }
-
-    function isObjectBasedEnabled() {
-      const el = document.getElementById('calObjectBasedToggle');
-      return el ? el.checked : true;
-    }
-
-    function updateCalRefStatus() {
-      const el = document.getElementById('calRefStatus');
-      if (!el) return;
-      const profile = computeObjectReferenceProfile();
-      const describe = (cls, label) => {
-        const p = profile[cls];
-        return p
-          ? `${label}: referensi dari ${p.sampleCount} kotak terverifikasi (median luas ${(p.medianArea * 100).toFixed(3)}% foto)`
-          : `${label}: belum cukup data referensi (perlu ≥${OBJECT_REF_MIN_SAMPLES} kotak terverifikasi) — split otomatis nonaktif untuk kelas ini, dihitung 1 blob = 1 objek seperti biasa`;
-      };
-      el.textContent = `${describe('janjang', 'Janjang')}. ${describe('brondol', 'Brondol')}.`;
-    }
-
-    // Janjang pakai detectJanjangByStemScar (2 tahap: seed bekas tangkai -> grow badan buah),
-    // Brondol tetap pakai detectBlobs (warna murni) — lihat komentar di janjangCharProfile.
-    function runAutoDetect(item) {
-      return runAutoDetectForClass(item, calTarget);
-    }
-
-    // Sama seperti runAutoDetect() tapi kelasnya EKSPLISIT sebagai parameter, bukan bergantung ke
-    // variable global calTarget -- dibutuhkan supaya 1 foto bisa dideteksi untuk KEDUA kelas
-    // (Janjang + Brondol) sekaligus dalam 1 aksi (lihat calApplyBothBtn/calApplyAllBothBtn di
-    // bawah), bukan cuma kelas yang lagi aktif di panel. Ditambahkan 2026-08-02 (revisi ke-5)
-    // atas masukan pengguna: "bila dalam 1 foto terdapat Janjang dan Brondol, masih belum dapat
-    // membedakan langsung BB nya" -- sebelumnya harus ganti target lalu Terapkan 2x terpisah.
-    function runAutoDetectForClass(item, cls) {
-      return cls === 'brondol'
-        ? detectBlobs(item.imgEl, calProfiles.brondol)
-        : detectJanjangByStemScar(item.imgEl, janjangCharProfile);
-    }
-
-    /** Deteksi + attachConfidence + (opsional) pemecahan blob oversized + buang kandidat <50% --
-     * PERSIS pipeline yang sama dipakai calApplyBtn/calApplyAllBtn, tapi dibungkus 1 fungsi supaya
-     * bisa dipanggil untuk kelas manapun tanpa bergantung calTarget. Dipakai oleh alur "Terapkan
-     * KEDUA Kelas" (janjang + brondol sekaligus). */
-    function detectClassBoxes(item, cls, refProfile, objectBased) {
-      const rawBoxes = attachConfidence(runAutoDetectForClass(item, cls), cls);
-      let boxes;
-      let splitInfo = { splitCount: 0, extraObjects: 0 };
-      if (objectBased) {
-        const result = splitOversizedBlobs(rawBoxes, cls, refProfile);
-        boxes = result.boxes;
-        splitInfo = { splitCount: result.splitCount, extraObjects: result.extraObjects };
-      } else {
-        boxes = rawBoxes.map(({ x, y, width, height, confidence }) => ({ x, y, width, height, confidence }));
-      }
-      const kept = boxes.filter((b) => typeof b.confidence !== 'number' || b.confidence >= MIN_CONFIDENCE_TO_APPLY);
-      return { kept, droppedCount: boxes.length - kept.length, splitInfo };
-    }
-
-    document.getElementById('calPreviewBtn').addEventListener('click', () => {
-      const item = currentItem();
-      if (!item) return;
-      const rawBoxes = attachConfidence(runAutoDetect(item), calTarget);
-      let extraNote = '';
-      if (isObjectBasedEnabled()) {
-        const refProfile = computeObjectReferenceProfile();
-        const { boxes, splitCount, extraObjects } = splitOversizedBlobs(rawBoxes, calTarget, refProfile);
-        previewBoxes = boxes;
-        if (splitCount > 0) {
-          extraNote = ` (termasuk ${extraObjects} objek tambahan diperkirakan dari ${splitCount} blob yang saling menempel, berdasarkan referensi foto terverifikasi)`;
-        } else if (!refProfile[calTarget]) {
-          extraNote = ` (referensi ukuran objek belum cukup untuk kelas ini — dihitung 1 blob = 1 objek seperti biasa)`;
-        }
-      } else {
-        previewBoxes = rawBoxes.map(({ x, y, width, height, confidence }) => ({ x, y, width, height, confidence }));
-      }
-      // Urutkan kandidat dari keyakinan TERTINGGI dulu -- supaya kalau kandidatnya banyak (mis.
-      // foto dengan banyak fragmen kecil/berisik), yang paling layak diperiksa manual duluan
-      // muncul di depan, bukan urutan acak sesuai posisi piksel. Ditambahkan 2026-08-02.
-      previewBoxes.sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0));
-      const withConf = previewBoxes.filter((b) => typeof b.confidence === 'number');
-      const avgConf = withConf.length
-        ? Math.round(withConf.reduce((s, b) => s + b.confidence, 0) / withConf.length)
-        : null;
-      const confNote = avgConf !== null ? `, rata-rata keyakinan ~${avgConf}%` : '';
-      // 2026-08-02 (revisi ke-3): mitigasi PRAKTIS untuk latar yang membingungkan detektor (kayu/
-      // batu pucat dsb, lihat catatan panjang di janjangCharProfile.maxTextureAnisotropy) --
-      // warna/bentuk/tekstur sudah dicoba & terbukti belum bisa memisahkan sebagian kasus ini
-      // sepenuhnya, jadi sebagai jaring pengaman: kalau jumlah kandidat di 1 foto jauh lebih
-      // banyak dari wajarnya (foto tandan asli di data referensi biasanya <20 kandidat), foto ini
-      // ditandai eksplisit sebagai "layak dicurigai" -- BUKAN membuang kotaknya (mungkin sebagian
-      // tetap benar), cuma memberi tahu supaya diperiksa manual dengan ekstra hati-hati.
-      const MANY_CANDIDATES_WARN = 30;
-      const manyNote =
-        calTarget === 'janjang' && previewBoxes.length > MANY_CANDIDATES_WARN
-          ? ` ⚠️ Kandidat jauh lebih banyak dari biasanya (${previewBoxes.length}) — kemungkinan latar foto ini (kayu/batu pucat/pantulan cahaya) membingungkan detektor, periksa manual ekstra hati-hati sebelum diterapkan.`
-          : '';
-      document.getElementById('calStatus').textContent =
-        previewBoxes.length > 0
-          ? `${previewBoxes.length} kandidat kotak ditemukan (warna ungu putus-putus)${confNote}${extraNote} — periksa dulu sebelum diterapkan.${manyNote}`
-          : 'Tidak ada kandidat ditemukan dengan setelan ini. Coba longgarkan slider.';
-      document.getElementById('calApplyBtn').disabled = previewBoxes.length === 0;
-      updateCalRefStatus();
-      drawFrame();
-    });
-
-    // Ambang %keyakinan minimum supaya kotak kandidat ikut diterapkan -- di bawah ini otomatis
-    // DIBUANG (tidak pernah masuk ke item.boxes sama sekali), bukan sekadar disembunyikan.
-    // Ditambahkan 2026-08-02 atas permintaan pengguna: "kalau angka keyakinan kamu dibawah 50%
-    // itu bisa langsung di hapus BB nya sehingga saya tidak banyak koreksi lagi" -- mengurangi
-    // beban koreksi manual dengan tidak menampilkan kandidat yang paling meragukan sama sekali.
-    const MIN_CONFIDENCE_TO_APPLY = 50;
-
-    document.getElementById('calApplyBtn').addEventListener('click', () => {
-      const item = currentItem();
-      if (!item || previewBoxes.length === 0) return;
-      const kept = previewBoxes.filter(
-        (b) => typeof b.confidence !== 'number' || b.confidence >= MIN_CONFIDENCE_TO_APPLY
-      );
-      const droppedCount = previewBoxes.length - kept.length;
-      kept.forEach((b) =>
-        item.boxes.push({ class: calTarget, x: b.x, y: b.y, width: b.width, height: b.height, confidence: b.confidence })
-      );
-      if (calTarget === 'janjang') {
-        item.finalJjg = item.boxes.filter((b) => b.class === 'janjang').length;
-        document.getElementById('finalJjg').value = item.finalJjg;
-      }
-      if (calTarget === 'brondol') recomputeBrondolForItem(item);
-      previewBoxes = [];
-      document.getElementById('calApplyBtn').disabled = true;
-      const dropNote = droppedCount > 0
-        ? ` (${droppedCount} kandidat keyakinan <${MIN_CONFIDENCE_TO_APPLY}% otomatis dibuang, tidak ikut diterapkan.)`
-        : '';
-      document.getElementById('calStatus').textContent =
-        `Diterapkan ke foto ini.${dropNote} Jangan lupa periksa & hapus kotak yang salah.`;
-      renderBoxList();
-      drawFrame();
-    });
-
-    document.getElementById('calApplyAllBtn').addEventListener('click', async () => {
-      if (items.length === 0) return;
-      const verifiedCountNow = items.filter((i) => i.verified).length;
-      const ok = confirm(
-        `Ini akan mengganti semua kotak "${calTarget === 'janjang' ? 'Janjang' : 'Brondol'}" di ` +
-          `foto yang BELUM terverifikasi (dari ${items.length} foto termuat) dengan hasil deteksi ` +
-          `otomatis (setelan saat ini). ${verifiedCountNow} foto yang sudah terverifikasi TIDAK ` +
-          `akan disentuh. Kotak kelas lain juga tidak akan disentuh. Lanjutkan?`
-      );
-      if (!ok) return;
-      saveCurrentInputs();
-      // Referensi ukuran objek dihitung SEKALI dari status "terverifikasi" saat ini, sebelum batch
-      // dimulai — supaya semua foto dalam 1 batch diproses dengan referensi yang konsisten (foto
-      // yang baru saja direset verified:false di tengah proses tidak ikut mengubah referensinya).
-      const objectBased = isObjectBasedEnabled();
-      const refProfile = objectBased ? computeObjectReferenceProfile() : null;
-      let processed = 0, totalExtraObjects = 0, totalSplitBlobs = 0, totalDropped = 0, skippedVerified = 0;
-      for (const item of items) {
-        // GERBANG KEAMANAN ditambahkan 2026-08-02 (revisi ke-5): sebelumnya tombol ini TIDAK
-        // pernah melewati foto yang sudah diverifikasi -- artinya sekali diklik, SEMUA foto
-        // (termasuk yang sudah Anda periksa & simpan manual) ikut ditimpa kotak deteksi otomatis
-        // & status verified-nya direset ke false. Ditemukan saat menyiapkan skrip batch terpisah
-        // (yang selalu diberi guard ini secara eksplisit) -- baru sekarang gerbangnya dipasang
-        // langsung di tombol asli supaya aman dipakai langsung dari panel juga.
-        if (item.verified) {
-          skippedVerified++;
-          continue;
-        }
-        // attachConfidence() ditambahkan di sini 2026-08-02 -- sebelumnya batch "Terapkan ke SEMUA
-        // Foto" TIDAK menghitung %keyakinan sama sekali (beda dari tombol preview 1-foto), jadi
-        // kotak hasil batch tidak pernah punya label %. Disamakan sekarang.
-        const rawBoxes = attachConfidence(runAutoDetect(item), calTarget);
-        let boxes;
-        if (objectBased) {
-          const result = splitOversizedBlobs(rawBoxes, calTarget, refProfile);
-          boxes = result.boxes;
-          totalExtraObjects += result.extraObjects;
-          totalSplitBlobs += result.splitCount;
-        } else {
-          boxes = rawBoxes.map(({ x, y, width, height, confidence }) => ({ x, y, width, height, confidence }));
-        }
-        // Buang kandidat keyakinan rendah SEBELUM diterapkan -- lihat MIN_CONFIDENCE_TO_APPLY di
-        // handler calApplyBtn untuk alasan lengkapnya.
-        const kept = boxes.filter((b) => typeof b.confidence !== 'number' || b.confidence >= MIN_CONFIDENCE_TO_APPLY);
-        totalDropped += boxes.length - kept.length;
-        item.boxes = item.boxes.filter((b) => b.class !== calTarget).concat(
-          kept.map((b) => ({ class: calTarget, x: b.x, y: b.y, width: b.width, height: b.height, confidence: b.confidence }))
-        );
-        if (calTarget === 'janjang') {
-          item.finalJjg = item.boxes.filter((b) => b.class === 'janjang').length;
-        }
-        if (calTarget === 'brondol') recomputeBrondolForItem(item);
-        item.verified = false; // hasil auto-deteksi batch tetap wajib diperiksa ulang
-        processed++;
-        if (processed % 5 === 0 || processed === items.length) {
-          document.getElementById('calStatus').textContent = `Memproses... ${processed}/${items.length} foto`;
-          await new Promise((r) => setTimeout(r, 0));
-        }
-      }
-      const splitNote = totalSplitBlobs > 0
-        ? ` ${totalExtraObjects} objek tambahan diperkirakan dari ${totalSplitBlobs} blob yang saling menempel (berdasarkan referensi foto terverifikasi sebelum batch ini dimulai).`
-        : '';
-      const dropNote = totalDropped > 0
-        ? ` ${totalDropped} kandidat keyakinan <${MIN_CONFIDENCE_TO_APPLY}% otomatis dibuang di semua foto (tidak ikut diterapkan).`
-        : '';
-      const skipNote = skippedVerified > 0 ? ` ${skippedVerified} foto terverifikasi dilewati (tidak disentuh).` : '';
-      document.getElementById('calStatus').textContent =
-        `Selesai. ${processed} foto (belum terverifikasi) diproses ulang untuk kelas "${calTarget}".${skipNote}${splitNote}${dropNote} Status "terverifikasi" pada foto yang barusan diproses direset — mohon periksa satu-satu.`;
-      updateCalRefStatus();
-      renderCurrent();
-    });
-
-    // --- Deteksi Otomatis "PINTAR" (skenario foto: Kumpulan TBS ATAU Tumpukan Brondol) -----
-    // Revisi ke-5 (2026-08-02) sebelumnya menjalankan Janjang DAN Brondol sekaligus di 1 foto --
-    // TERBUKTI BIAS: brondolan yang MASIH MENEMPEL di permukaan 1 tandan (bukan tumpukan lepas di
-    // tanah) ikut ditandai sebagai kotak Brondol terpisah, padahal itu bagian dari Janjang yang
-    // sama (ditemukan dari foto susunan TBS bertumpuk yang dikirim pengguna). Revisi ke-6 ini
-    // mengikuti langkah eksplisit dari pengguna: "Dalam 1 Object Foto...identifikasi secara
-    // global dulu..itu Foto Kumpulan TBS yang Tersusun atau Tumpukan Brondol..jika itu Kumpulan
-    // susunan TBS maka identifikasi satu per satu TBS..Dan untuk Brondol sendiri..yang di Hitung
-    // adalah Tumpukannya." -- klasifikasi GLOBAL per foto dulu (lihat detectSceneAwareBoxes),
-    // BUKAN kedua kelas sekaligus: kalau foto ini punya minimal 1 Janjang meyakinkan, foto
-    // dianggap "kumpulan TBS tersusun" & HANYA Janjang yang diterapkan (Brondol tidak dijalankan
-    // sama sekali, kotak Brondol lama pun dibuang -- kemungkinan itu salah kategori dari revisi
-    // sebelumnya). Kalau nihil Janjang, foto dianggap "tumpukan Brondol lepas" & HANYA Brondol
-    // yang diterapkan.
-    function detectSceneAwareBoxes(item, refProfile, objectBased) {
-      const janjangResult = detectClassBoxes(item, 'janjang', refProfile, objectBased);
-      if (janjangResult.kept.length > 0) {
-        return { scene: 'tbs', janjang: janjangResult, brondol: null };
-      }
-      const brondolResult = detectClassBoxes(item, 'brondol', refProfile, objectBased);
-      return { scene: 'brondol', janjang: null, brondol: brondolResult };
-    }
-
-    function applySceneAwareResult(item, result) {
-      // Buang KEDUA kelas dulu (janjang & brondol) -- skenario foto cuma 1 dari keduanya, jadi
-      // kelas yang KALAH klasifikasi harus benar-benar kosong, bukan cuma tidak ditambah lagi
-      // (kalau sebelumnya ada kotak salah-kategori dari revisi lama, ini otomatis membersihkannya).
-      // Kelas lain (mis. Jangkos, kotak manual pengguna sendiri) TIDAK disentuh.
-      item.boxes = item.boxes.filter((b) => b.class !== 'janjang' && b.class !== 'brondol');
-      const winning = result.scene === 'tbs' ? result.janjang : result.brondol;
-      const cls = result.scene === 'tbs' ? 'janjang' : 'brondol';
-      item.boxes = item.boxes.concat(
-        winning.kept.map((b) => ({ class: cls, x: b.x, y: b.y, width: b.width, height: b.height, confidence: b.confidence }))
-      );
-      item.finalJjg = item.boxes.filter((b) => b.class === 'janjang').length;
-      recomputeBrondolForItem(item);
-      return winning;
-    }
-
-    const calApplyBothBtnEl = document.getElementById('calApplyBothBtn');
-    if (calApplyBothBtnEl) {
-      calApplyBothBtnEl.addEventListener('click', () => {
-        const item = currentItem();
-        if (!item) return;
-        const objectBased = isObjectBasedEnabled();
-        const refProfile = objectBased ? computeObjectReferenceProfile() : null;
-        const result = detectSceneAwareBoxes(item, refProfile, objectBased);
-        const winning = applySceneAwareResult(item, result);
-        document.getElementById('finalJjg').value = item.finalJjg;
-        previewBoxes = [];
-        document.getElementById('calApplyBtn').disabled = true;
-        const splitNote = winning.splitInfo.splitCount > 0 ? ` ${winning.splitInfo.extraObjects} objek tambahan diperkirakan dari ${winning.splitInfo.splitCount} blob yang saling menempel.` : '';
-        const dropNote = winning.droppedCount > 0 ? ` ${winning.droppedCount} kandidat keyakinan <${MIN_CONFIDENCE_TO_APPLY}% otomatis dibuang.` : '';
-        const sceneLabel = result.scene === 'tbs' ? 'Kumpulan TBS tersusun -> HANYA Janjang' : 'Tumpukan Brondol lepas -> HANYA Brondol';
-        document.getElementById('calStatus').textContent =
-          `Foto ini diklasifikasikan: ${sceneLabel}.${splitNote}${dropNote} Jangan lupa periksa & hapus kotak yang salah.`;
-        renderBoxList();
-        drawFrame();
-      });
-    }
-
-    const calApplyAllBothBtnEl = document.getElementById('calApplyAllBothBtn');
-    if (calApplyAllBothBtnEl) {
-      calApplyAllBothBtnEl.addEventListener('click', async () => {
-        if (items.length === 0) return;
-        const verifiedCountNow = items.filter((i) => i.verified).length;
-        const ok = confirm(
-          `Ini akan mengklasifikasikan tiap foto yang BELUM terverifikasi (dari ${items.length} ` +
-            `foto termuat) sebagai "kumpulan TBS tersusun" (HANYA kotak Janjang diterapkan) atau ` +
-            `"tumpukan Brondol lepas" (HANYA kotak Brondol diterapkan) -- tidak pernah keduanya di ` +
-            `1 foto. ${verifiedCountNow} foto yang sudah terverifikasi TIDAK akan disentuh. Kelas ` +
-            `lain (mis. Jangkos) juga tidak akan disentuh. Lanjutkan?`
-        );
-        if (!ok) return;
-        saveCurrentInputs();
-        const objectBased = isObjectBasedEnabled();
-        const refProfile = objectBased ? computeObjectReferenceProfile() : null;
-        let processed = 0, totalDropped = 0, totalSplitBlobs = 0, totalExtraObjects = 0, skippedVerified = 0, tbsScenes = 0, brondolScenes = 0;
-        for (const item of items) {
-          if (item.verified) {
-            skippedVerified++;
-            continue;
-          }
-          const result = detectSceneAwareBoxes(item, refProfile, objectBased);
-          const winning = applySceneAwareResult(item, result);
-          if (result.scene === 'tbs') tbsScenes++; else brondolScenes++;
-          totalDropped += winning.droppedCount;
-          totalSplitBlobs += winning.splitInfo.splitCount;
-          totalExtraObjects += winning.splitInfo.extraObjects;
-          item.verified = false; // hasil auto-deteksi batch tetap wajib diperiksa ulang
-          processed++;
-          if (processed % 5 === 0 || processed === items.length) {
-            document.getElementById('calStatus').textContent = `Mengklasifikasikan & mendeteksi... ${processed}/${items.length} foto`;
-            await new Promise((r) => setTimeout(r, 0));
-          }
-        }
-        const skipNote = skippedVerified > 0 ? ` ${skippedVerified} foto terverifikasi dilewati (tidak disentuh).` : '';
-        const splitNote = totalSplitBlobs > 0 ? ` ${totalExtraObjects} objek tambahan diperkirakan dari ${totalSplitBlobs} blob yang saling menempel.` : '';
-        const dropNote = totalDropped > 0 ? ` ${totalDropped} kandidat keyakinan <${MIN_CONFIDENCE_TO_APPLY}% otomatis dibuang di semua foto.` : '';
-        document.getElementById('calStatus').textContent =
-          `Selesai. ${processed} foto (belum terverifikasi) diproses: ${tbsScenes} diklasifikasikan kumpulan TBS (Janjang), ${brondolScenes} diklasifikasikan tumpukan Brondol.${skipNote}${splitNote}${dropNote} Mohon periksa satu-satu.`;
-        updateCalRefStatus();
-        renderCurrent();
-      });
-    }
-
     // --- Perkiraan "Bershaf" (Janjang tersembunyi/tertutup di baris belakang) -----------------
     // Lihat catatan lengkap di estimateBershafCandidates(). Tombol ini HANYA menghitung &
     // menampilkan kandidat (kotak putus-putus abu-abu) -- tidak mengubah item.boxes sampai
@@ -1898,7 +945,7 @@
             msg += ` (${result.cappedCount} kandidat kecil diabaikan karena total perkiraan sudah melebihi batas wajar 2x jumlah kotak yang terlihat.)`;
           }
         }
-        document.getElementById('calStatus').textContent = msg;
+        document.getElementById('bershafStatus').textContent = msg;
         drawFrame();
       });
     }
@@ -1923,7 +970,7 @@
         const addedCount = bershafCandidates.length;
         bershafCandidates = [];
         calBershafApplyBtnEl.disabled = true;
-        document.getElementById('calStatus').textContent =
+        document.getElementById('bershafStatus').textContent =
           `${addedCount} kandidat bershaf ditambahkan ke foto ini. Total sekarang ${item.finalJjg} Janjang. ` +
           `Wajib diperiksa satu-satu -- geser/hapus/koreksi kotak yang tidak sesuai sebelum menandai foto ini "terverifikasi".`;
         renderBoxList();
@@ -1931,51 +978,6 @@
       });
     }
 
-    document.getElementById('calExportBtn').addEventListener('click', () => {
-      downloadTextFile(
-        'sawitvision_kalibrasi.json',
-        JSON.stringify(
-          { profiles: calProfiles, janjangCharProfile, brondolPileWeightKg: brdPileWeightKg },
-          null,
-          2
-        ),
-        'application/json'
-      );
-    });
-    document.getElementById('calImportInput').addEventListener('change', async (e) => {
-      const file = e.target.files && e.target.files[0];
-      if (!file) return;
-      try {
-        const parsed = JSON.parse(await file.text());
-        const profilesSrc = parsed.profiles || parsed; // dukung format lama (tanpa wrapper) juga
-        // Format lama menyimpan "janjang" di dalam profiles (warna murni) -- kalau ketemu file
-        // lama, field-nya yang cocok (brightnessMin/saturationMax/rMinusBMin) dipetakan ke ciri
-        // SEED (bekas tangkai) di janjangCharProfile, supaya setelan lama tidak hilang percuma.
-        if (profilesSrc.janjang) {
-          const old = profilesSrc.janjang;
-          janjangCharProfile = {
-            ...janjangCharProfile,
-            seedBrightnessMin: old.brightnessMin ?? janjangCharProfile.seedBrightnessMin,
-            seedSaturationMax: old.saturationMax ?? janjangCharProfile.seedSaturationMax,
-            seedRMinusBMin: old.rMinusBMin ?? janjangCharProfile.seedRMinusBMin,
-            minAreaSlider: old.minAreaSlider ?? janjangCharProfile.minAreaSlider,
-            maxAreaSlider: old.maxAreaSlider ?? janjangCharProfile.maxAreaSlider,
-          };
-        }
-        if (parsed.janjangCharProfile) {
-          janjangCharProfile = { ...janjangCharProfile, ...parsed.janjangCharProfile };
-        }
-        if (profilesSrc.brondol) calProfiles.brondol = { ...calProfiles.brondol, ...profilesSrc.brondol };
-        calSyncSlidersFromProfile();
-        if (Number.isFinite(parsed.brondolPileWeightKg) && parsed.brondolPileWeightKg > 0) {
-          setBrdPileWeight(parsed.brondolPileWeightKg, presetKeyForWeight(parsed.brondolPileWeightKg));
-        }
-        document.getElementById('calStatus').textContent = 'Setelan kalibrasi dimuat.';
-      } catch (err) {
-        alert('File setelan tidak valid: ' + err.message);
-      }
-      e.target.value = '';
-    });
 
     // --- Kalibrasi Berat per Tumpukan Brondol ----------------------------
     // Jumlah Brondol TIDAK dihitung butir satu-satu — kotak oranye yang digambar
@@ -2058,6 +1060,10 @@
       // masih berlaku -- kalau ya, tombolnya langsung menunjukkan itu begitu halaman dibuka.
       // Belum ada foto dimuat di titik ini, jadi ini baru mengecek status, belum auto-load data.
       tryAutoLoadFromFolder(false).catch((e) => console.warn('Auto-load folder kerja gagal:', e.message));
+      // Cek diam-diam juga apakah file model YOLO26n (.tflite) pernah dipilih sebelumnya di
+      // browser ini -- kalau ada, cukup tampilkan namanya (belum dibaca/di-compile sampai tombol
+      // deteksi diklik, lihat ensureYoloModelCompiled()).
+      tryAutoDetectYoloModelHandle().catch((e) => console.warn('Cek model YOLO26n tersimpan gagal:', e.message));
     }
 
     /** Bangun `items` dari daftar File foto -- dipakai baik oleh "1. Pilih Foto" manual maupun
@@ -2327,6 +1333,316 @@
       btn.textContent = nowHidden
         ? 'Gunakan cara manual (pilih file satu per satu)'
         : '✕ Sembunyikan cara manual';
+    });
+
+    // --- Deteksi Otomatis YOLO26n (langsung di browser, lewat LiteRT.js) --------------------
+    // Menggantikan panel lama "Deteksi Otomatis Berdasarkan Karakteristik Object" (heuristik
+    // warna/bentuk) — sekarang memakai model YOLO26n hasil training sungguhan (sawit_best.pt /
+    // sawit_detector.tflite), PERSIS model yang sama dipakai di aplikasi mobile SawitVision.
+    // Dijalankan LANGSUNG di browser lewat @litertjs/core (WASM/XNNPACK), tidak ada foto yang
+    // dikirim ke server manapun -- lihat import map di <head> untuk sumber library-nya.
+    //
+    // Model (.tflite) TIDAK di-fetch dari URL (fetch ke file lokal via file:// diblokir CORS oleh
+    // Chrome kalau halaman ini dibuka langsung dari disk, bukan lewat server) -- sebagai gantinya
+    // pengguna memilih file model SEKALI lewat File System Access API (showOpenFilePicker, sama
+    // mekanismenya dengan "Hubungkan Folder Kerja" di atas), lalu handle-nya disimpan di
+    // IndexedDB (idbGetHandle/idbSetHandle, dipakai bersama WORKING_DIR_DB) supaya tidak perlu
+    // pilih ulang setiap buka halaman ini lagi. Browser tanpa dukungan API ini (Firefox/Safari)
+    // otomatis jatuh ke <input type="file"> biasa sebagai fallback (yoloModelInput).
+    const YOLO_INPUT_SIZE = 640;
+    const YOLO_CLASS_NAMES = ['janjang', 'brondol', 'janjang_kosong']; // urutan classId 0/1/2, sama seperti model.names di Flutter
+    const YOLO_CONFIDENCE_STORAGE_KEY = 'sawitvision_yolo_confidence_v1';
+    const YOLO_MODEL_HANDLE_KEY = 'yoloModelHandle'; // key di IndexedDB store WORKING_DIR_STORE yang sama
+
+    let yoloConfidence = 0.35; // default sama seperti aplikasi mobile (SettingsService)
+    try {
+      const savedConf = parseFloat(localStorage.getItem(YOLO_CONFIDENCE_STORAGE_KEY));
+      if (Number.isFinite(savedConf) && savedConf > 0 && savedConf < 1) yoloConfidence = savedConf;
+    } catch (e) { /* localStorage tidak tersedia -- pakai default */ }
+
+    let yoloModelHandle = null; // FileSystemFileHandle (atau pseudo-handle {name, getFile} dari fallback <input type=file>)
+    let yoloLiteRt = null; // modul @litertjs/core setelah diimpor + runtime WASM dimuat (cache, cukup 1x per sesi halaman)
+    let yoloRuntimeLoadPromise = null;
+    let yoloCompiledModel = null; // CompiledModel siap pakai (cache, cukup 1x selama file model tidak diganti)
+    let yoloCompiledModelPromise = null;
+
+    function yoloConfidenceEl() { return document.getElementById('yoloConfidence'); }
+    if (yoloConfidenceEl()) {
+      yoloConfidenceEl().value = Math.round(yoloConfidence * 100);
+      document.getElementById('yoloConfidenceVal').textContent = `${Math.round(yoloConfidence * 100)}%`;
+      yoloConfidenceEl().addEventListener('input', (e) => {
+        yoloConfidence = parseFloat(e.target.value) / 100;
+        document.getElementById('yoloConfidenceVal').textContent = `${Math.round(yoloConfidence * 100)}%`;
+        try { localStorage.setItem(YOLO_CONFIDENCE_STORAGE_KEY, String(yoloConfidence)); } catch (e) { /* abaikan */ }
+      });
+    }
+
+    /** Muat runtime WASM LiteRT.js (1x per sesi halaman, di-cache lewat promise supaya klik
+     * berulang/beruntun tidak memicu muat ulang berkali-kali). */
+    async function ensureYoloRuntimeLoaded() {
+      if (yoloLiteRt) return yoloLiteRt;
+      if (!yoloRuntimeLoadPromise) {
+        yoloRuntimeLoadPromise = (async () => {
+          const mod = await import('@litertjs/core');
+          await mod.loadLiteRt('https://cdn.jsdelivr.net/npm/@litertjs/core@2.5.2/wasm/');
+          yoloLiteRt = mod;
+          return mod;
+        })().catch((e) => {
+          yoloRuntimeLoadPromise = null; // biar bisa dicoba lagi kalau gagal (mis. koneksi CDN putus)
+          throw e;
+        });
+      }
+      return yoloRuntimeLoadPromise;
+    }
+
+    /** Minta pengguna memilih file model .tflite (sekali saja) -- handle-nya disimpan supaya
+     * dikenali otomatis lain kali halaman ini dibuka (selama izinnya masih berlaku). */
+    async function pickYoloModelFile() {
+      const statusEl = document.getElementById('yoloModelStatus');
+      if (!isFileSystemAccessSupported()) {
+        document.getElementById('yoloModelInput').click();
+        return;
+      }
+      try {
+        const [handle] = await window.showOpenFilePicker({
+          types: [{ description: 'Model TFLite', accept: { 'application/octet-stream': ['.tflite'] } }],
+        });
+        yoloModelHandle = handle;
+        await idbSetHandle(YOLO_MODEL_HANDLE_KEY, handle);
+        yoloCompiledModel = null;
+        yoloCompiledModelPromise = null; // paksa compile ulang dari file yang baru dipilih
+        if (statusEl) statusEl.textContent = `📎 Model dipilih: ${handle.name}. Klik salah satu tombol deteksi untuk memuatnya.`;
+      } catch (e) {
+        if (e && e.name !== 'AbortError' && statusEl) {
+          statusEl.textContent = 'Gagal memilih file model: ' + e.message;
+        }
+      }
+    }
+    if (document.getElementById('yoloPickModelBtn')) {
+      document.getElementById('yoloPickModelBtn').addEventListener('click', pickYoloModelFile);
+    }
+    document.getElementById('yoloModelInput').addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      yoloModelHandle = { name: file.name, getFile: async () => file };
+      yoloCompiledModel = null;
+      yoloCompiledModelPromise = null;
+      document.getElementById('yoloModelStatus').textContent = `📎 Model dipilih: ${file.name}. Klik salah satu tombol deteksi untuk memuatnya.`;
+      e.target.value = '';
+    });
+
+    /** Dipanggil saat halaman dibuka: cek diam-diam apakah ada file model yang pernah dipilih
+     * sebelumnya di browser ini -- kalau ada, tinggal tampilkan namanya (baru benar-benar dibaca
+     * & di-compile nanti saat tombol deteksi diklik, lihat ensureYoloModelCompiled()). */
+    async function tryAutoDetectYoloModelHandle() {
+      if (!isFileSystemAccessSupported()) return;
+      try {
+        const handle = await idbGetHandle(YOLO_MODEL_HANDLE_KEY);
+        if (handle) {
+          yoloModelHandle = handle;
+          const statusEl = document.getElementById('yoloModelStatus');
+          if (statusEl) statusEl.textContent = `📎 Model tersimpan: ${handle.name} (klik salah satu tombol deteksi untuk memuatnya).`;
+        }
+      } catch (e) { /* belum pernah dipilih / gagal baca -- biarkan, tombol "Pilih File Model" tetap ada */ }
+    }
+
+    /** Baca bytes file model (kalau perlu minta izin baca ulang) lalu compile 1x (di-cache). */
+    async function ensureYoloModelCompiled() {
+      if (yoloCompiledModel) return yoloCompiledModel;
+      if (yoloCompiledModelPromise) return yoloCompiledModelPromise;
+      yoloCompiledModelPromise = (async () => {
+        if (!yoloModelHandle) {
+          throw new Error('Belum ada file model .tflite dipilih. Klik "📎 Pilih File Model (.tflite)" dulu.');
+        }
+        if (typeof yoloModelHandle.queryPermission === 'function') {
+          let perm = await yoloModelHandle.queryPermission({ mode: 'read' });
+          if (perm !== 'granted') perm = await yoloModelHandle.requestPermission({ mode: 'read' });
+          if (perm !== 'granted') throw new Error('Izin membaca file model ditolak.');
+        }
+        const file = await yoloModelHandle.getFile();
+        const modelBytes = new Uint8Array(await file.arrayBuffer());
+        const { loadAndCompile } = await ensureYoloRuntimeLoaded();
+        const model = await loadAndCompile(modelBytes, { accelerator: 'wasm' });
+        yoloCompiledModel = model;
+        return model;
+      })();
+      yoloCompiledModelPromise.catch(() => { yoloCompiledModelPromise = null; }); // biar bisa dicoba lagi kalau gagal
+      return yoloCompiledModelPromise;
+    }
+
+    /** Letterbox (resize + padding abu-abu 114,114,114) foto ke kanvas 640x640, sama persis
+     * dengan preprocessing di training_pipeline (Python) & TfliteDetectionService (Dart) supaya
+     * hasil deteksi konsisten dengan aplikasi mobile. Mengembalikan input tensor NCHW ternormalisasi
+     * 0-1 + info letterbox (scale/pad) untuk mengembalikan koordinat hasil ke skala foto asli. */
+    function preprocessImageForYolo(imgEl) {
+      const inputSize = YOLO_INPUT_SIZE;
+      const origW = imgEl.naturalWidth, origH = imgEl.naturalHeight;
+      const scale = Math.min(inputSize / origW, inputSize / origH);
+      const newW = Math.round(origW * scale), newH = Math.round(origH * scale);
+      const padLeft = Math.floor((inputSize - newW) / 2);
+      const padTop = Math.floor((inputSize - newH) / 2);
+      const off = document.createElement('canvas');
+      off.width = inputSize; off.height = inputSize;
+      const octx = off.getContext('2d');
+      octx.fillStyle = 'rgb(114,114,114)';
+      octx.fillRect(0, 0, inputSize, inputSize);
+      octx.drawImage(imgEl, padLeft, padTop, newW, newH);
+      const imgData = octx.getImageData(0, 0, inputSize, inputSize).data; // RGBA, HWC
+      const chw = new Float32Array(3 * inputSize * inputSize);
+      const plane = inputSize * inputSize;
+      for (let y = 0; y < inputSize; y++) {
+        for (let x = 0; x < inputSize; x++) {
+          const srcIdx = (y * inputSize + x) * 4;
+          const dstIdx = y * inputSize + x;
+          chw[dstIdx] = imgData[srcIdx] / 255; // R
+          chw[plane + dstIdx] = imgData[srcIdx + 1] / 255; // G
+          chw[plane * 2 + dstIdx] = imgData[srcIdx + 2] / 255; // B
+        }
+      }
+      return { chw, meta: { scale, padLeft, padTop, origW, origH } };
+    }
+
+    /** Urai output mentah model ([1,300,6] = 300 baris [x1,y1,x2,y2,confidence,classId] dalam
+     * koordinat piksel kanvas 640x640, NMS sudah dibakar di dalam model, tidak perlu NMS manual)
+     * jadi kotak dengan koordinat FRAKSI (0-1) relatif foto asli -- sama seperti skema box lain
+     * di halaman ini -- setelah membalik letterbox & membuang kandidat di bawah ambang keyakinan. */
+    function decodeYoloOutputToBoxes(outData, meta, confThreshold) {
+      const { scale, padLeft, padTop, origW, origH } = meta;
+      const boxes = [];
+      for (let i = 0; i < 300; i++) {
+        const base = i * 6;
+        const conf = outData[base + 4];
+        if (conf < confThreshold) continue;
+        const cls = YOLO_CLASS_NAMES[Math.round(outData[base + 5])];
+        if (!cls) continue;
+        let x1 = (outData[base] - padLeft) / scale;
+        let y1 = (outData[base + 1] - padTop) / scale;
+        let x2 = (outData[base + 2] - padLeft) / scale;
+        let y2 = (outData[base + 3] - padTop) / scale;
+        x1 = clamp(x1, 0, origW); y1 = clamp(y1, 0, origH);
+        x2 = clamp(x2, 0, origW); y2 = clamp(y2, 0, origH);
+        const width = x2 - x1, height = y2 - y1;
+        if (width <= 0 || height <= 0) continue;
+        boxes.push({
+          class: cls, x: x1 / origW, y: y1 / origH, width: width / origW, height: height / origH,
+          confidence: Math.round(conf * 100),
+        });
+      }
+      return boxes;
+    }
+
+    /** Jalankan pipeline lengkap (muat runtime+model kalau belum -> letterbox -> inferensi ->
+     * urai output) untuk 1 foto (item), mengembalikan kotak-kotak hasil deteksi siap pakai. */
+    async function detectYoloBoxesForItem(item) {
+      await ensureYoloRuntimeLoaded();
+      const model = await ensureYoloModelCompiled();
+      const { chw, meta } = preprocessImageForYolo(item.imgEl);
+      const inputTensor = new yoloLiteRt.Tensor(chw, [1, 3, YOLO_INPUT_SIZE, YOLO_INPUT_SIZE]);
+      const results = await model.run(inputTensor);
+      inputTensor.delete();
+      const outCpu = await results[0].moveTo('wasm');
+      const outData = outCpu.toTypedArray();
+      for (const t of results) t.delete();
+      outCpu.delete();
+      return decodeYoloOutputToBoxes(outData, meta, yoloConfidence);
+    }
+
+    // Terapkan ke foto yang sedang dibuka -- 1 klik langsung menjalankan (tidak ada langkah
+    // pratinjau terpisah), MENGGANTI kotak kelas Janjang/Brondol/Janjang Kosong yang ada (kelas
+    // "Lainnya"/Jangkos manual lama tidak disentuh) -- sama seperti konvensi tombol deteksi
+    // otomatis lain di halaman ini (mis. calApplyBothBtn versi lama).
+    document.getElementById('yoloRunCurrentBtn').addEventListener('click', async () => {
+      const item = currentItem();
+      if (!item) return;
+      const statusEl = document.getElementById('yoloStatus');
+      const btn = document.getElementById('yoloRunCurrentBtn');
+      btn.disabled = true;
+      statusEl.textContent = '🤖 Memuat model & menjalankan deteksi...';
+      try {
+        const boxes = await detectYoloBoxesForItem(item);
+        item.boxes = item.boxes.filter((b) => !YOLO_CLASS_NAMES.includes(b.class)).concat(boxes);
+        item.finalJjg = item.boxes.filter((b) => b.class === 'janjang').length;
+        item.finalJjgKosong = item.boxes.filter((b) => b.class === 'janjang_kosong').length;
+        document.getElementById('finalJjg').value = item.finalJjg;
+        document.getElementById('finalJjgKosong').value = item.finalJjgKosong;
+        recomputeBrondolForItem(item);
+        const counts = YOLO_CLASS_NAMES
+          .map((c) => `${MODE_SHORT_LABEL[c]} ${boxes.filter((b) => b.class === c).length}`)
+          .join(', ');
+        statusEl.textContent = boxes.length > 0
+          ? `✅ Selesai: ${boxes.length} kotak ditemukan (${counts}). Kotak kelas lain (mis. Jangkos manual) tidak disentuh. Jangan lupa periksa & koreksi sebelum menandai foto ini "terverifikasi".`
+          : `Tidak ada objek ditemukan dengan ambang keyakinan ${Math.round(yoloConfidence * 100)}% saat ini -- coba turunkan ambangnya kalau menurut Anda seharusnya ada objek di foto ini.`;
+        renderBoxList();
+        drawFrame();
+      } catch (e) {
+        statusEl.textContent = '❌ Gagal: ' + e.message;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    // Terapkan ke SEMUA foto yang belum diverifikasi -- mengikuti konvensi keamanan yang sama
+    // seperti tombol batch lain di halaman ini: foto yang sudah "terverifikasi" TIDAK PERNAH
+    // disentuh, dan status "terverifikasi" pada foto yang barusan diproses direset ke false
+    // (hasil deteksi otomatis batch tetap wajib diperiksa ulang manual).
+    document.getElementById('yoloRunAllBtn').addEventListener('click', async () => {
+      if (items.length === 0) return;
+      const verifiedCountNow = items.filter((i) => i.verified).length;
+      const ok = confirm(
+        `Ini akan menjalankan deteksi YOLO26n pada semua foto yang BELUM terverifikasi (dari ${items.length} foto termuat), ` +
+          `mengganti kotak Janjang/Brondol/Janjang Kosong dengan hasil model (ambang keyakinan ${Math.round(yoloConfidence * 100)}%). ` +
+          `${verifiedCountNow} foto yang sudah terverifikasi TIDAK akan disentuh. Kotak kelas "Lainnya" (mis. Jangkos manual lama) juga tidak akan disentuh. ` +
+          `Proses ini berjalan di browser ini (per foto satu-satu) dan bisa memakan waktu cukup lama untuk banyak foto. Lanjutkan?`
+      );
+      if (!ok) return;
+      saveCurrentInputs();
+      const statusEl = document.getElementById('yoloStatus');
+      const btn = document.getElementById('yoloRunAllBtn');
+      btn.disabled = true;
+      try {
+        statusEl.textContent = '🤖 Memuat model...';
+        await ensureYoloRuntimeLoaded();
+        await ensureYoloModelCompiled();
+      } catch (e) {
+        statusEl.textContent = '❌ Gagal memuat model: ' + e.message;
+        btn.disabled = false;
+        return;
+      }
+      let processed = 0, skippedVerified = 0, totalBoxes = 0, failedCount = 0;
+      for (const item of items) {
+        if (item.verified) {
+          skippedVerified++;
+          continue;
+        }
+        try {
+          const boxes = await detectYoloBoxesForItem(item);
+          item.boxes = item.boxes.filter((b) => !YOLO_CLASS_NAMES.includes(b.class)).concat(boxes);
+          item.finalJjg = item.boxes.filter((b) => b.class === 'janjang').length;
+          item.finalJjgKosong = item.boxes.filter((b) => b.class === 'janjang_kosong').length;
+          recomputeBrondolForItem(item);
+          item.verified = false; // hasil auto-deteksi batch tetap wajib diperiksa ulang
+          totalBoxes += boxes.length;
+        } catch (e) {
+          failedCount++;
+          console.warn('Gagal deteksi YOLO26n untuk', item.name, e.message);
+        }
+        processed++;
+        if (processed % 5 === 0 || processed === items.length) {
+          statusEl.textContent = `Memproses... ${processed}/${items.length} foto (${totalBoxes} kotak ditemukan sejauh ini)`;
+          await new Promise((r) => setTimeout(r, 0));
+        }
+      }
+      const skipNote = skippedVerified > 0 ? ` ${skippedVerified} foto terverifikasi dilewati (tidak disentuh).` : '';
+      const failNote = failedCount > 0 ? ` ${failedCount} foto gagal diproses (lihat console untuk detail).` : '';
+      btn.disabled = false;
+      // renderCurrent() dipanggil DULU (menyegarkan tampilan foto yang sedang dibuka kalau ikut
+      // diproses batch ini -- termasuk mengosongkan yoloStatus sebagai bagian dari reset per-foto),
+      // BARU SETELAH itu status ringkasan akhir ditulis -- supaya ringkasan ini tidak langsung
+      // tertimpa kosong oleh renderCurrent() (renderCurrent membersihkan yoloStatus tiap ganti foto).
+      renderCurrent();
+      statusEl.textContent =
+        `Selesai. ${processed - failedCount} foto (belum terverifikasi) diproses dengan YOLO26n, total ${totalBoxes} kotak.${skipNote}${failNote} ` +
+        `Status "terverifikasi" pada foto yang barusan diproses direset -- mohon periksa satu-satu.`;
     });
 
     // Apakah sebuah objek JSON yang sudah di-parse itu file ANOTASI (sawitvision_annotations.json
@@ -2846,14 +2162,13 @@
 
       selectedBoxIdx = null;
       interaction = null;
-      previewBoxes = [];
       bershafCandidates = [];
-      const calApplyBtnEl = document.getElementById('calApplyBtn');
-      if (calApplyBtnEl) calApplyBtnEl.disabled = true;
       const calBershafApplyBtnEl = document.getElementById('calBershafApplyBtn');
       if (calBershafApplyBtnEl) calBershafApplyBtnEl.disabled = true;
-      const calStatusEl = document.getElementById('calStatus');
-      if (calStatusEl) calStatusEl.textContent = '';
+      const bershafStatusEl = document.getElementById('bershafStatus');
+      if (bershafStatusEl) bershafStatusEl.textContent = '';
+      const yoloStatusEl = document.getElementById('yoloStatus');
+      if (yoloStatusEl) yoloStatusEl.textContent = '';
 
       document.getElementById('photoIdx').textContent = current + 1;
       document.getElementById('photoTotal').textContent = items.length;
@@ -2913,17 +2228,6 @@
         : 'ℹ️ Tampilkan Panduan & Penjelasan';
     });
 
-    // Panel "Deteksi Otomatis Berdasarkan Warna" — fitur lanjutan yang jarang dipakai, disembunyikan
-    // secara default (bukan sekadar teks penjelasan, tapi seluruh panel kontrolnya) supaya tidak
-    // makan tempat. Klik judulnya untuk membuka/menutup kapan pun dibutuhkan.
-    document.getElementById('calPanelToggle').addEventListener('click', () => {
-      const body = document.getElementById('calPanelBody');
-      const chevron = document.getElementById('calPanelChevron');
-      const nowHidden = body.classList.toggle('hidden');
-      chevron.textContent = nowHidden ? '▸' : '▾';
-      if (!nowHidden) updateCalRefStatus();
-    });
-
     // Panel "Indikasi Foto Duplikat" — bisa disembunyikan begitu selesai memeriksa/mendeklarasikan
     // semua pasangan (tanpa harus dismiss satu-satu), supaya tidak menyita tempat di atas foto.
     document.getElementById('dupCollapseBtn').addEventListener('click', () => {
@@ -2955,38 +2259,9 @@
         });
       }
 
-      previewBoxes.forEach((b) => {
-        const x = b.x * canvas.width;
-        const y = b.y * canvas.height;
-        const w = b.width * canvas.width;
-        const h = b.height * canvas.height;
-        ctx.strokeStyle = '#7C3AED';
-        ctx.lineWidth = Math.max(2, canvas.width / 400);
-        ctx.setLineDash([6, 4]);
-        ctx.strokeRect(x, y, w, h);
-        ctx.setLineDash([]);
-        // Label %keyakinan per kotak kandidat (mirip tampilan skor confidence model deteksi lain)
-        // -- lihat attachConfidence(). Ditambahkan 2026-08-02.
-        if (typeof b.confidence === 'number') {
-          const label = `${calTarget === 'brondol' ? 'Brondol' : 'Janjang'} ${b.confidence}%`;
-          const fontPx = Math.max(10, Math.round(canvas.width / 55));
-          ctx.font = `${fontPx}px sans-serif`;
-          const padX = 4;
-          const metrics = ctx.measureText(label);
-          const boxW = metrics.width + padX * 2;
-          const boxH = fontPx + 6;
-          const labelY = Math.max(0, y - boxH);
-          ctx.fillStyle = 'rgba(124, 58, 237, 0.85)';
-          ctx.fillRect(x, labelY, boxW, boxH);
-          ctx.fillStyle = '#FFFFFF';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(label, x + padX, labelY + boxH / 2);
-        }
-      });
-
-      // Kandidat "bershaf" (perkiraan tandan tersembunyi) -- gaya visual SENGAJA dibedakan dari
-      // previewBoxes biasa (abu-abu putus-putus, bukan ungu) supaya jelas ini kandidat perkiraan
-      // occlusion, bukan hasil deteksi objek yang kelihatan utuh. Lihat estimateBershafCandidates().
+      // Kandidat "bershaf" (perkiraan tandan tersembunyi) -- kotak putus-putus abu-abu, supaya
+      // jelas ini kandidat perkiraan occlusion, bukan hasil deteksi objek yang kelihatan utuh.
+      // Lihat estimateBershafCandidates().
       bershafCandidates.forEach((c) => {
         const x = c.x * canvas.width;
         const y = c.y * canvas.height;
@@ -3066,7 +2341,7 @@
       // Label kecil DI BAWAH kotak (bukan menimpa/menutupi bagian atas objek saat
       // mau menggambar kotak berikutnya di sebelahnya) — nomor + singkatan kelas (Jjg/Brd/
       // Jangkos), font kecil supaya tidak mengganggu. Kalau kotak ini berasal dari deteksi
-      // otomatis (attachConfidence, lihat calApplyBtn/calApplyAllBtn) dan %keyakinan-nya ikut
+      // otomatis (mis. YOLO26n, lihat yoloRunCurrentBtn/yoloRunAllBtn) dan %keyakinan-nya ikut
       // tersimpan, tampilkan juga di label ini -- bukan cuma di preview -- supaya kotak yang
       // sudah DITERAPKAN pun tetap kelihatan seberapa yakin detektornya (2026-08-02, atas
       // permintaan pengguna).
@@ -4459,7 +3734,6 @@
       btn.disabled = false;
     });
 
-    calSyncSlidersFromProfile();
     setBrdPileWeight(5, 'brdCal5');
     init().catch((e) => console.error(e));
   </script>

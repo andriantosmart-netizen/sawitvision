@@ -48,6 +48,7 @@ class SawitVisionApp extends StatelessWidget {
             builder: (_) => ResultScreen(
               imagePath: args['imagePath'] as String,
               mode: args['mode'] as ScanMode,
+              initialBoxes: args['initialBoxes'] as List<DetectedObject>?,
             ),
           );
         }

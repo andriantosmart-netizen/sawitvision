@@ -1,5 +1,3 @@
-import 'fraksi.dart';
-
 /// Mode pemindaian yang tersedia.
 enum ScanMode { janjang, brondol }
 
@@ -25,6 +23,27 @@ class DetectedObject {
     required this.height,
     required this.confidence,
   });
+
+  /// Dipakai [BoundingBoxEditor] (lib/widgets/bounding_box_editor.dart) untuk
+  /// membuat salinan dengan sebagian field diubah (geser/resize/reklasifikasi
+  /// kotak) tanpa mengubah instance lama -- [DetectedObject] sengaja immutable.
+  DetectedObject copyWith({
+    String? label,
+    double? x,
+    double? y,
+    double? width,
+    double? height,
+    double? confidence,
+  }) {
+    return DetectedObject(
+      label: label ?? this.label,
+      x: x ?? this.x,
+      y: y ?? this.y,
+      width: width ?? this.width,
+      height: height ?? this.height,
+      confidence: confidence ?? this.confidence,
+    );
+  }
 
   Map<String, dynamic> toMap() => {
         'label': label,
@@ -52,11 +71,28 @@ class ScanResult {
   final String imagePath;
   final ScanMode mode;
 
-  final int jumlahJanjang; // hasil untuk mode janjang
-  final int estimasiBrondol; // hasil untuk mode brondol
-  final UkuranJanjang ukuranJanjang;
-  final double persenBrondol;
-  final Fraksi fraksi;
+  final int jumlahJanjang; // hasil untuk mode janjang (dari jumlah kotak 'janjang')
+
+  /// Untuk mode brondol: jumlah TUMPUKAN/kelompok brondol yang ditandai
+  /// (dari jumlah kotak 'brondol') -- BUKAN lagi estimasi butir/fruitlet
+  /// individual seperti versi lama. Dikalikan [brdKgPerTumpukan] untuk
+  /// dapat [brdFinalKg], persis pola "Tumpukan x Kg" di koreksi.html (Web).
+  final int estimasiBrondol;
+
+  /// Jumlah kotak 'janjang_kosong' (tandan kosong tanpa buah) yang ditandai
+  /// di foto ini -- bisa muncul di kedua mode, tapi paling relevan di mode
+  /// Hitung Janjang.
+  final int janjangKosong;
+
+  /// Kalibrasi berat (kg) per satu tumpukan brondol yang dipakai saat scan
+  /// ini disimpan (preset 3/5/7 atau custom, lihat SettingsScreen &
+  /// ResultScreen). 0 untuk mode janjang / belum diisi.
+  final double brdKgPerTumpukan;
+
+  /// Hasil akhir: estimasiBrondol (jumlah tumpukan) x brdKgPerTumpukan,
+  /// DISIMPAN (bukan dihitung ulang) supaya riwayat lama tidak berubah
+  /// kalau kalibrasi default di Settings diubah belakangan.
+  final double brdFinalKg;
 
   final String blok; // nama/kode blok kebun
   final String catatan;
@@ -76,9 +112,9 @@ class ScanResult {
     required this.mode,
     this.jumlahJanjang = 0,
     this.estimasiBrondol = 0,
-    this.ukuranJanjang = UkuranJanjang.sedang,
-    this.persenBrondol = 0,
-    this.fraksi = Fraksi.f00,
+    this.janjangKosong = 0,
+    this.brdKgPerTumpukan = 0,
+    this.brdFinalKg = 0,
     this.blok = '',
     this.catatan = '',
     this.latitude,
@@ -89,9 +125,9 @@ class ScanResult {
   ScanResult copyWith({
     int? jumlahJanjang,
     int? estimasiBrondol,
-    UkuranJanjang? ukuranJanjang,
-    double? persenBrondol,
-    Fraksi? fraksi,
+    int? janjangKosong,
+    double? brdKgPerTumpukan,
+    double? brdFinalKg,
     String? blok,
     String? catatan,
     bool? synced,
@@ -103,9 +139,9 @@ class ScanResult {
       mode: mode,
       jumlahJanjang: jumlahJanjang ?? this.jumlahJanjang,
       estimasiBrondol: estimasiBrondol ?? this.estimasiBrondol,
-      ukuranJanjang: ukuranJanjang ?? this.ukuranJanjang,
-      persenBrondol: persenBrondol ?? this.persenBrondol,
-      fraksi: fraksi ?? this.fraksi,
+      janjangKosong: janjangKosong ?? this.janjangKosong,
+      brdKgPerTumpukan: brdKgPerTumpukan ?? this.brdKgPerTumpukan,
+      brdFinalKg: brdFinalKg ?? this.brdFinalKg,
       blok: blok ?? this.blok,
       catatan: catatan ?? this.catatan,
       latitude: latitude,
@@ -121,9 +157,9 @@ class ScanResult {
         'mode': mode.name,
         'jumlahJanjang': jumlahJanjang,
         'estimasiBrondol': estimasiBrondol,
-        'ukuranJanjang': ukuranJanjang.name,
-        'persenBrondol': persenBrondol,
-        'fraksi': fraksi.name,
+        'janjangKosong': janjangKosong,
+        'brdKgPerTumpukan': brdKgPerTumpukan,
+        'brdFinalKg': brdFinalKg,
         'blok': blok,
         'catatan': catatan,
         'latitude': latitude,
@@ -138,10 +174,9 @@ class ScanResult {
         mode: ScanMode.values.byName(map['mode'] as String),
         jumlahJanjang: map['jumlahJanjang'] as int? ?? 0,
         estimasiBrondol: map['estimasiBrondol'] as int? ?? 0,
-        ukuranJanjang:
-            UkuranJanjang.values.byName(map['ukuranJanjang'] as String? ?? 'sedang'),
-        persenBrondol: (map['persenBrondol'] as num?)?.toDouble() ?? 0,
-        fraksi: Fraksi.values.byName(map['fraksi'] as String? ?? 'f00'),
+        janjangKosong: map['janjangKosong'] as int? ?? 0,
+        brdKgPerTumpukan: (map['brdKgPerTumpukan'] as num?)?.toDouble() ?? 0,
+        brdFinalKg: (map['brdFinalKg'] as num?)?.toDouble() ?? 0,
         blok: map['blok'] as String? ?? '',
         catatan: map['catatan'] as String? ?? '',
         latitude: (map['latitude'] as num?)?.toDouble(),
@@ -162,9 +197,9 @@ class ScanResult {
       'mode': mode.name,
       'jumlah_janjang': jumlahJanjang,
       'estimasi_brondol': estimasiBrondol,
-      'ukuran_janjang': ukuranJanjang.name,
-      'persen_brondol': persenBrondol,
-      'fraksi': fraksi.name,
+      'janjang_kosong': janjangKosong,
+      'brd_kg_per_tumpukan': brdKgPerTumpukan,
+      'brd_final_kg': brdFinalKg,
       'blok': blok,
       'catatan': catatan,
       'latitude': latitude,

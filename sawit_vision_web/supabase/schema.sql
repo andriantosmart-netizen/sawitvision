@@ -308,6 +308,19 @@ alter table photo_annotations drop constraint if exists photo_annotations_object
 alter table photo_annotations add constraint photo_annotations_object_class_check
   check (object_class in ('janjang', 'brondol', 'janjang_kosong'));
 
+-- ----------------------------------------------------------------------------
+-- 10. Brondol sekarang dihitung lewat Tumpukan x Kg (mengganti Fraksi
+--     kematangan/persen brondol di app mobile), + field Janjang Kosong.
+--     Kolom lama (ukuran_janjang/persen_brondol/fraksi) SENGAJA dibiarkan
+--     apa adanya untuk data historis -- tidak diisi lagi oleh app mobile
+--     versi baru, tapi tetap aman dibaca kalau dibutuhkan lagi nanti.
+--     Migrasi ini idempotent, aman dijalankan ulang di project lama maupun
+--     baru (lihat pola yang sama di section 8 & 9 di atas).
+-- ----------------------------------------------------------------------------
+alter table scan_results add column if not exists janjang_kosong int not null default 0;
+alter table scan_results add column if not exists brd_kg_per_tumpukan numeric not null default 0;
+alter table scan_results add column if not exists brd_final_kg numeric not null default 0;
+
 -- ============================================================================
 -- Selesai. Langkah berikutnya ada di docs/SETUP_SUPABASE_WEB.md:
 --   1. Insert 1 baris ke tabel `companies` untuk kebun Anda.

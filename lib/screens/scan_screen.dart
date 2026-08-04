@@ -3,15 +3,16 @@ import 'package:image_picker/image_picker.dart';
 
 import '../models/scan_result.dart';
 import '../utils/constants.dart';
+import 'live_camera_screen.dart';
 
-/// Layar untuk mengambil foto (kamera atau galeri) sebelum diproses oleh
-/// mesin deteksi di [ResultScreen].
+/// Layar untuk mengambil foto (kamera live atau galeri) sebelum diproses
+/// oleh mesin deteksi di [ResultScreen].
 ///
-/// Catatan implementasi: dipakai `image_picker` (bukan live camera preview)
-/// supaya lebih stabil di berbagai jenis HP tanpa perlu tuning kamera.
-/// Untuk pengalaman preview real-time + overlay langsung saat kamera aktif,
-/// paket `camera` sudah tercantum di pubspec dan bisa dikembangkan lebih
-/// lanjut di layar ini.
+/// "Ambil Foto" membuka [LiveCameraScreen] (preview real-time + deteksi
+/// berkala + tag manual sebelum jepret). "Pilih dari Galeri" tetap memakai
+/// `image_picker` seperti sebelumnya -- untuk foto yang sudah ada, deteksi
+/// otomatis tetap jalan di [ResultScreen] seperti biasa, hanya saja tanpa
+/// kesempatan menandai langsung sebelum jepret.
 class ScanScreen extends StatefulWidget {
   final ScanMode mode;
   const ScanScreen({super.key, required this.mode});
@@ -24,11 +25,11 @@ class _ScanScreenState extends State<ScanScreen> {
   final _picker = ImagePicker();
   bool _busy = false;
 
-  Future<void> _pick(ImageSource source) async {
+  Future<void> _pickFromGallery() async {
     setState(() => _busy = true);
     try {
       final xfile = await _picker.pickImage(
-        source: source,
+        source: ImageSource.gallery,
         maxWidth: 1600,
         imageQuality: 90,
       );
@@ -44,6 +45,13 @@ class _ScanScreenState extends State<ScanScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  void _openLiveCamera() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => LiveCameraScreen(mode: widget.mode)),
+    );
   }
 
   @override
@@ -78,7 +86,7 @@ class _ScanScreenState extends State<ScanScreen> {
                 child: FilledButton.icon(
                   icon: const Icon(Icons.camera_alt),
                   label: const Text('Ambil Foto'),
-                  onPressed: () => _pick(ImageSource.camera),
+                  onPressed: _openLiveCamera,
                 ),
               ),
               const SizedBox(height: AppSpacing.sm),
@@ -87,7 +95,7 @@ class _ScanScreenState extends State<ScanScreen> {
                 child: OutlinedButton.icon(
                   icon: const Icon(Icons.photo_library_outlined),
                   label: const Text('Pilih dari Galeri'),
-                  onPressed: () => _pick(ImageSource.gallery),
+                  onPressed: _pickFromGallery,
                 ),
               ),
             ],

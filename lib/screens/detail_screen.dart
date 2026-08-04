@@ -2,11 +2,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../models/fraksi.dart';
 import '../models/scan_result.dart';
 import '../services/database_service.dart';
 import '../utils/constants.dart';
-import '../widgets/grade_badge.dart';
 
 class DetailScreen extends StatelessWidget {
   final ScanResult scan;
@@ -60,21 +58,20 @@ class DetailScreen extends StatelessWidget {
           const SizedBox(height: AppSpacing.sm),
           Text(
             isBrondol
-                ? 'Estimasi Brondol: ${scan.estimasiBrondol}'
+                ? 'Final: ${scan.brdFinalKg.toStringAsFixed(1)} kg'
                 : 'Jumlah Janjang: ${scan.jumlahJanjang}',
             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           if (isBrondol) ...[
-            const SizedBox(height: AppSpacing.sm),
-            Row(
-              children: [
-                GradeBadge(fraksi: scan.fraksi),
-                const SizedBox(width: AppSpacing.sm),
-                Text('${scan.persenBrondol.toStringAsFixed(1)}% brondol'),
-              ],
-            ),
             const SizedBox(height: 4),
-            Text('Ukuran janjang: ${scan.ukuranJanjang.label}',
+            Text(
+              '${scan.estimasiBrondol} tumpukan × ${scan.brdKgPerTumpukan.toStringAsFixed(1)} kg/tumpukan',
+              style: const TextStyle(fontSize: 13, color: Colors.black54),
+            ),
+          ],
+          if (scan.janjangKosong > 0) ...[
+            const SizedBox(height: 4),
+            Text('Janjang kosong: ${scan.janjangKosong}',
                 style: const TextStyle(fontSize: 13, color: Colors.black54)),
           ],
           const SizedBox(height: AppSpacing.md),

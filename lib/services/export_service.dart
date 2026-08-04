@@ -4,7 +4,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../models/scan_result.dart';
-import '../models/fraksi.dart';
 
 /// Ekspor riwayat scan ke CSV, lalu buka share sheet Android (kirim via
 /// WhatsApp/Email/simpan ke Drive, dsb.) — proses ekspor sendiri tetap
@@ -17,10 +16,10 @@ class ExportService {
         'Mode',
         'Blok',
         'Jumlah Janjang',
-        'Estimasi Brondol',
-        'Ukuran Janjang',
-        'Persen Brondol',
-        'Fraksi',
+        'Janjang Kosong',
+        'Tumpukan Brondol',
+        'Kg per Tumpukan',
+        'Final Kg Brondol',
         'Catatan',
       ],
       ...scans.map((s) => [
@@ -28,10 +27,10 @@ class ExportService {
             s.mode.label,
             s.blok,
             s.jumlahJanjang,
+            s.janjangKosong,
             s.estimasiBrondol,
-            s.ukuranJanjang.label,
-            s.persenBrondol.toStringAsFixed(1),
-            s.fraksi.label,
+            s.brdKgPerTumpukan.toStringAsFixed(1),
+            s.brdFinalKg.toStringAsFixed(1),
             s.catatan,
           ]),
     ];

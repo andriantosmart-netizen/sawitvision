@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
-import '../models/fraksi.dart';
 import '../models/scan_result.dart';
 
 /// Semua pembacaan/penulisan riwayat scan lewat SQLite lokal.
@@ -25,8 +24,13 @@ class DatabaseService {
 
     return openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: (db, version) async {
+        // CATATAN: ukuranJanjang/persenBrondol/fraksi dipertahankan di skema
+        // (walau sudah tidak diisi lagi oleh kode terbaru -- lihat
+        // onUpgrade v3 di bawah) supaya instalasi baru & lama sama-sama
+        // punya struktur tabel yang identik. Semua kolom itu punya DEFAULT,
+        // jadi insertScan() yang tidak lagi mengirim key tersebut tetap aman.
         await db.execute('''
           CREATE TABLE scan_results (
             id TEXT PRIMARY KEY,
@@ -38,6 +42,9 @@ class DatabaseService {
             ukuranJanjang TEXT NOT NULL DEFAULT 'sedang',
             persenBrondol REAL NOT NULL DEFAULT 0,
             fraksi TEXT NOT NULL DEFAULT 'f00',
+            janjangKosong INTEGER NOT NULL DEFAULT 0,
+            brdKgPerTumpukan REAL NOT NULL DEFAULT 0,
+            brdFinalKg REAL NOT NULL DEFAULT 0,
             blok TEXT NOT NULL DEFAULT '',
             catatan TEXT NOT NULL DEFAULT '',
             latitude REAL,
@@ -54,6 +61,20 @@ class DatabaseService {
           // Data lama dianggap belum tersinkron (default 0) — aman diulang.
           await db.execute(
               'ALTER TABLE scan_results ADD COLUMN synced INTEGER NOT NULL DEFAULT 0');
+        }
+        if (oldVersion < 3) {
+          // Fitur baru: Brondol sekarang dihitung lewat Tumpukan x Kg
+          // (bukan lagi Fraksi kematangan/persen brondol) + field Janjang
+          // Kosong. Kolom ukuranJanjang/persenBrondol/fraksi SENGAJA
+          // dibiarkan apa adanya (tidak dihapus) -- SQLite versi lama tidak
+          // semuanya mendukung DROP COLUMN dengan aman, dan data lama masih
+          // sah dibaca lewat kolom itu kalau suatu saat dibutuhkan lagi.
+          await db.execute(
+              'ALTER TABLE scan_results ADD COLUMN janjangKosong INTEGER NOT NULL DEFAULT 0');
+          await db.execute(
+              'ALTER TABLE scan_results ADD COLUMN brdKgPerTumpukan REAL NOT NULL DEFAULT 0');
+          await db.execute(
+              'ALTER TABLE scan_results ADD COLUMN brdFinalKg REAL NOT NULL DEFAULT 0');
         }
       },
     );
@@ -145,13 +166,17 @@ class DatabaseService {
         0, (sum, s) => sum + (s.mode == ScanMode.janjang ? s.jumlahJanjang : 0));
     final totalBrondolScans =
         scans.where((s) => s.mode == ScanMode.brondol).length;
-    final idealCount = scans.where((s) => s.fraksi.ideal).length;
+    final totalBrondolKg = scans.fold<double>(
+        0, (sum, s) => sum + (s.mode == ScanMode.brondol ? s.brdFinalKg : 0));
+    final totalJanjangKosong =
+        scans.fold<int>(0, (sum, s) => sum + s.janjangKosong);
 
     return {
       'totalScan': scans.length,
       'totalJanjang': totalJanjang,
       'totalBrondolScans': totalBrondolScans,
-      'idealCount': idealCount,
+      'totalBrondolKg': totalBrondolKg,
+      'totalJanjangKosong': totalJanjangKosong,
     };
   }
 }

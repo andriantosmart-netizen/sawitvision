@@ -6,7 +6,6 @@ import '../models/scan_result.dart';
 import '../services/database_service.dart';
 import '../services/export_service.dart';
 import '../utils/constants.dart';
-import '../widgets/grade_badge.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -103,8 +102,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                     children: [
                                       Text(
                                         isBrondol
-                                            ? '${s.estimasiBrondol} brondol'
-                                            : '${s.jumlahJanjang} janjang',
+                                            ? '${s.brdFinalKg.toStringAsFixed(1)} kg (${s.estimasiBrondol} tumpukan)'
+                                            : '${s.jumlahJanjang} janjang'
+                                                '${s.janjangKosong > 0 ? ' (${s.janjangKosong} kosong)' : ''}',
                                         style: const TextStyle(
                                             fontWeight: FontWeight.bold),
                                       ),
@@ -117,7 +117,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                     ],
                                   ),
                                 ),
-                                if (isBrondol) GradeBadge(fraksi: s.fraksi, compact: true),
                               ],
                             ),
                           ),

@@ -13,6 +13,7 @@ class SettingsService {
   static const _kFraksiThresholds = 'fraksi_thresholds';
   static const _kDefaultUkuran = 'default_ukuran_janjang';
   static const _kTfliteConfidence = 'tflite_confidence_threshold';
+  static const _kBrdKgPerTumpukan = 'brd_kg_per_tumpukan';
 
   // Sinkronisasi cloud (opsional)
   static const _kCompanyId = 'sync_company_id';
@@ -57,6 +58,22 @@ class SettingsService {
   Future<void> setTfliteConfidenceThreshold(double value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_kTfliteConfidence, value);
+  }
+
+  /// Kalibrasi berat (kg) per satu tumpukan/kelompok brondol -- dipakai
+  /// sebagai nilai AWAL di ResultScreen mode Brondol (preset 3/5/7 kg atau
+  /// custom, sama seperti pola "Tumpukan x Kg" di koreksi.html Web). User
+  /// tetap bisa mengubahnya per-foto; nilai di sini otomatis diperbarui ke
+  /// pilihan terakhir setiap kali sebuah scan brondol disimpan, supaya
+  /// tidak perlu pilih ulang tiap kali kalau kalibrasinya konsisten.
+  Future<double> getBrdKgPerTumpukan() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getDouble(_kBrdKgPerTumpukan) ?? 5.0;
+  }
+
+  Future<void> setBrdKgPerTumpukan(double value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_kBrdKgPerTumpukan, value);
   }
 
   Future<UkuranJanjang> getDefaultUkuran() async {
