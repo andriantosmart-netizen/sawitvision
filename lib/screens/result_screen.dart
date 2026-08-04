@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' show Rect;
 import 'package:flutter/material.dart';
+import 'package:image/image.dart' as img;
 import 'package:uuid/uuid.dart';
 
 import '../models/scan_result.dart';
@@ -10,6 +12,7 @@ import '../services/tflite_detection_service.dart';
 import '../services/settings_service.dart';
 import '../services/database_service.dart';
 import '../services/sync_service.dart';
+import '../utils/auto_fit_box.dart';
 import '../utils/constants.dart';
 import '../widgets/bounding_box_editor.dart';
 
@@ -53,6 +56,15 @@ class _ResultScreenState extends State<ResultScreen> {
 
   List<DetectedObject> _boxes = [];
   late String _activeClass;
+
+  /// Foto yang sudah didecode ke piksel, dipakai HANYA untuk menebak batas
+  /// objek saat double-tap-tambah-kotak (lihat [_autoFitAt] & [autoFitBoxAt]
+  /// di lib/utils/auto_fit_box.dart). Di-decode SEKALI & disimpan supaya
+  /// tiap double-tap tidak perlu decode ulang foto (bisa besar/lambat) --
+  /// dijalankan di latar belakang (unawaited) di [_init] supaya tidak
+  /// menunda tampilan layar hasil. Null selama belum selesai / gagal decode
+  /// -- double-tap tetap jalan, cuma jatuh ke ukuran kotak default.
+  img.Image? _decodedForAutoFit;
 
   static const _kgPresets = [3.0, 5.0, 7.0];
   double _kgPerTumpukan = 5.0;
@@ -109,6 +121,9 @@ class _ResultScreenState extends State<ResultScreen> {
     _useCustomKg = !_kgPresets.contains(_kgPerTumpukan);
     _customKgController.text = _formatKg(_kgPerTumpukan);
 
+    // Sengaja tidak di-await -- tidak boleh menunda spinner loading di atas.
+    unawaited(_loadDecodedForAutoFit());
+
     final initial = widget.initialBoxes;
     if (initial != null && initial.isNotEmpty) {
       // Sudah ditag lewat LiveCameraScreen (deteksi live + tap manual) --
@@ -121,6 +136,24 @@ class _ResultScreenState extends State<ResultScreen> {
       return;
     }
     await _runDetection();
+  }
+
+  Future<void> _loadDecodedForAutoFit() async {
+    try {
+      final bytes = await File(widget.imagePath).readAsBytes();
+      _decodedForAutoFit = img.decodeImage(bytes);
+    } catch (_) {
+      _decodedForAutoFit = null; // double-tap tetap jalan, jatuh ke ukuran default
+    }
+  }
+
+  /// Dipanggil [BoundingBoxEditor] saat user double-tap di area kosong --
+  /// lihat catatan performa di lib/utils/auto_fit_box.dart (dibatasi ke
+  /// jendela lokal kecil supaya cepat, tidak proses seluruh foto).
+  Future<Rect?> _autoFitAt(double fracX, double fracY) async {
+    final source = _decodedForAutoFit;
+    if (source == null) return null;
+    return autoFitBoxAt(source: source, tapFracX: fracX, tapFracY: fracY);
   }
 
   Future<void> _runDetection() async {
@@ -237,12 +270,15 @@ class _ResultScreenState extends State<ResultScreen> {
                   classOptions: _classOptions,
                   activeClass: _activeClass,
                   onActiveClassChanged: (c) => setState(() => _activeClass = c),
+                  autoFitBoxAt: _autoFitAt,
                 ),
                 const SizedBox(height: AppSpacing.md),
                 Text(
                   'Terdeteksi otomatis awal: ${_boxes.length} objek '
                   '(confidence rata-rata ${(_avgConfidence * 100).toStringAsFixed(0)}%). '
-                  'Tambah/hapus/geser kotak langsung di foto kalau ada yang kurang tepat.',
+                  'Double-tap di foto untuk menambah kotak, tekan & seret untuk geser, '
+                  'atau pilih kotak lalu seret gagang sudutnya untuk resize. Hapus/ganti '
+                  'kelas lewat tombol yang muncul di bawah foto setelah kotak dipilih.',
                   style: const TextStyle(fontSize: 12, color: Colors.black54),
                 ),
                 const SizedBox(height: AppSpacing.md),

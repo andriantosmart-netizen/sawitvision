@@ -24,16 +24,39 @@ class BoxClassOption {
 /// model) -- sama seperti kotak manual di koreksi.html Web.
 const double kManualBoxConfidence = 1.0;
 
-const double _kHandleRadius = 12;
-const double _kMinBoxSizeFraction = 0.01; // buang drag super kecil (kesalahan tap)
+/// Ukuran default kotak baru (fraksi dari lebar/tinggi foto) kalau
+/// [BoundingBoxEditor.autoFitBoxAt] tidak tersedia atau gagal menebak batas
+/// objek di titik yang di-double-tap.
+const double _kDefaultAddSizeFraction = 0.12;
 
-enum _DragMode { none, draw, move, resizeTL, resizeTR, resizeBL, resizeBR }
+const double _kHandleRadius = 12; // ukuran VISUAL gagang resize (digambar)
+const double _kHandleHitRadius = 26; // radius SENTUH gagang (lebih besar dari
+// visualnya supaya gampang "digrab" jari di layar HP -- lihat riwayat
+// masukan user: gagang resize di sudut kanan-atas dulu sering ketiban badge
+// hapus yang sekarang sudah dihapus, plus radius sentuh lama (~21.6px)
+// dirasa kurang lega.
+
+enum _DragMode { none, move, resizeTL, resizeTR, resizeBL, resizeBR }
 
 /// Editor kotak interaktif di atas sebuah foto -- padanan langsung dari
-/// canvas box editor di koreksi.html (Web): tap-drag di area kosong untuk
-/// menggambar kotak baru (kelas sesuai [activeClass] yang sedang dipilih),
-/// tap sebuah kotak untuk memilihnya (muncul gagang di 4 sudut untuk
-/// resize + badge "x" untuk hapus), drag badan kotak untuk menggeser.
+/// canvas box editor di koreksi.html (Web). Model interaksi (disesuaikan
+/// dari masukan user setelah dicoba langsung di HP):
+///
+/// - **Tambah kotak baru**: DOUBLE-TAP di area kosong pada objek yang mau
+///   ditandai. Kalau [autoFitBoxAt] diberikan, ukuran kotak otomatis
+///   menyesuaikan batas objek di titik itu (lewat tebakan warna lokal);
+///   kalau tidak tersedia/gagal, dipakai ukuran default
+///   ([_kDefaultAddSizeFraction]) yang tetap bisa dirapikan lewat resize.
+///   (Sebelumnya: tekan & seret di area kosong -- diganti karena dirasa
+///   sulit dipakai untuk foto lapangan yang objeknya kecil-kecil.)
+/// - **Geser**: tekan & tahan badan kotak lalu seret (hold & drag).
+/// - **Resize**: kotak harus terpilih dulu (tap sekali badan kotak, atau
+///   tap chip nomornya di daftar bawah foto) supaya gagang di 4 sudutnya
+///   muncul & aktif, baru tap gagang sudut yang mau diubah lalu seret.
+/// - **Hapus/reklasifikasi**: LEWAT TOOLBAR DI BAWAH FOTO (bukan lagi
+///   badge "x" di atas foto) -- badge lama SENGAJA dihapus karena
+///   posisinya di sudut kanan-atas kotak persis bertabrakan dengan gagang
+///   resize sudut itu, sehingga sulit "digrab" saat kotak sedang terpilih.
 ///
 /// Semua koordinat kotak REL (0-1) terhadap ukuran foto ASLI (sama seperti
 /// [DetectedObject] & format yang sudah dipakai TfliteDetectionService/
@@ -52,13 +75,22 @@ class BoundingBoxEditor extends StatefulWidget {
   final String activeClass;
   final ValueChanged<String>? onActiveClassChanged;
 
+  /// Dipanggil saat user DOUBLE-TAP di area kosong (bukan menimpa kotak
+  /// yang sudah ada) untuk menambah kotak baru -- terima titik tap (fraksi
+  /// 0-1 relatif foto asli), kembalikan [Rect] (fraksi juga) hasil tebakan
+  /// batas objek, atau null kalau tidak yakin/gagal (pemanggil widget ini
+  /// lalu jatuh ke ukuran default). Opsional -- kalau null, semua kotak
+  /// baru langsung pakai ukuran default.
+  final Future<Rect?> Function(double tapFracX, double tapFracY)? autoFitBoxAt;
+
   /// Tampilkan baris tombol pemilih kelas di atas foto. Matikan kalau
   /// pemanggil sudah punya UI sendiri untuk memilih [activeClass].
   final bool showClassPicker;
 
   /// Tampilkan daftar chip kotak (mirip "Kotak di Foto Ini" di Web) di
-  /// bawah foto -- membantu memilih/menghapus kotak kecil yang susah
-  /// disentuh langsung di foto.
+  /// bawah foto -- membantu memilih kotak kecil yang susah disentuh
+  /// langsung di foto (hapus/reklasifikasi lewat toolbar yang muncul di
+  /// bawah foto begitu sebuah kotak terpilih).
   final bool showBoxList;
 
   const BoundingBoxEditor({
@@ -69,6 +101,7 @@ class BoundingBoxEditor extends StatefulWidget {
     required this.classOptions,
     required this.activeClass,
     this.onActiveClassChanged,
+    this.autoFitBoxAt,
     this.showClassPicker = true,
     this.showBoxList = true,
   });
@@ -86,7 +119,7 @@ class _BoundingBoxEditorState extends State<BoundingBoxEditor> {
   _DragMode _dragMode = _DragMode.none;
   Offset? _dragStartLocal; // posisi pointer (px lokal) saat pan dimulai
   Rect? _dragOrigRectFrac; // rect kotak (fraksi 0-1) sebelum drag ini dimulai
-  Rect? _drawingRectFrac; // kotak yang sedang digambar baru (belum ditambahkan ke list)
+  bool _addingBox = false; // true selagi menunggu autoFitBoxAt (hindari dobel-tambah)
 
   @override
   void initState() {
@@ -172,7 +205,7 @@ class _BoundingBoxEditorState extends State<BoundingBoxEditor> {
       _DragMode.resizeBR: Offset(r.right * canvasPx.width, r.bottom * canvasPx.height),
     };
     for (final entry in corners.entries) {
-      if ((entry.value - localPx).distance <= _kHandleRadius * 1.8) return entry.key;
+      if ((entry.value - localPx).distance <= _kHandleHitRadius) return entry.key;
     }
     return null;
   }
@@ -207,28 +240,17 @@ class _BoundingBoxEditorState extends State<BoundingBoxEditor> {
       return;
     }
 
-    // Area kosong -- mulai gambar kotak baru dengan kelas aktif.
+    // Area kosong -- tidak melakukan apa-apa (kotak baru DITAMBAH lewat
+    // double-tap, lihat _onDoubleTapAdd, supaya tidak rancu dengan gestur
+    // geser/resize kotak yang sudah ada).
     setState(() => _selectedIdx = null);
-    _dragMode = _DragMode.draw;
-    _dragStartLocal = local;
-    final f = _toFrac(local, canvasPx);
-    _drawingRectFrac = Rect.fromLTWH(f.dx, f.dy, 0, 0);
   }
 
   void _onPanUpdate(DragUpdateDetails details, Size canvasPx) {
     if (_dragMode == _DragMode.none || _dragStartLocal == null) return;
-    final local = details.localPosition;
-
-    if (_dragMode == _DragMode.draw) {
-      final start = _toFrac(_dragStartLocal!, canvasPx);
-      final cur = _toFrac(local, canvasPx);
-      setState(() {
-        _drawingRectFrac = Rect.fromPoints(start, cur);
-      });
-      return;
-    }
-
     if (_selectedIdx == null || _dragOrigRectFrac == null) return;
+
+    final local = details.localPosition;
     final deltaPx = local - _dragStartLocal!;
     final deltaFrac = Offset(deltaPx.dx / canvasPx.width, deltaPx.dy / canvasPx.height);
     final orig = _dragOrigRectFrac!;
@@ -250,7 +272,7 @@ class _BoundingBoxEditorState extends State<BoundingBoxEditor> {
       case _DragMode.resizeBR:
         next = Rect.fromLTRB(orig.left, orig.top, orig.right + deltaFrac.dx, orig.bottom + deltaFrac.dy);
         break;
-      default:
+      case _DragMode.none:
         break;
     }
 
@@ -274,44 +296,60 @@ class _BoundingBoxEditorState extends State<BoundingBoxEditor> {
   }
 
   void _onPanEnd(DragEndDetails details) {
-    if (_dragMode == _DragMode.draw && _drawingRectFrac != null) {
-      final r = _drawingRectFrac!;
-      final normalized = Rect.fromLTRB(
-        r.left.clamp(0.0, 1.0).toDouble(),
-        r.top.clamp(0.0, 1.0).toDouble(),
-        r.right.clamp(0.0, 1.0).toDouble(),
-        r.bottom.clamp(0.0, 1.0).toDouble(),
-      );
-      final w = normalized.width.abs();
-      final h = normalized.height.abs();
-      if (w >= _kMinBoxSizeFraction && h >= _kMinBoxSizeFraction) {
-        final rect = Rect.fromLTRB(
-          normalized.left < normalized.right ? normalized.left : normalized.right,
-          normalized.top < normalized.bottom ? normalized.top : normalized.bottom,
-          normalized.left < normalized.right ? normalized.right : normalized.left,
-          normalized.top < normalized.bottom ? normalized.bottom : normalized.top,
-        );
-        final newBox = DetectedObject(
-          label: widget.activeClass,
-          x: rect.left,
-          y: rect.top,
-          width: rect.width,
-          height: rect.height,
-          confidence: kManualBoxConfidence,
-        );
-        final next = List<DetectedObject>.from(widget.boxes)..add(newBox);
-        setState(() {
-          _selectedIdx = next.length - 1;
-          _drawingRectFrac = null;
-        });
-        _emit(next);
-      } else {
-        setState(() => _drawingRectFrac = null);
-      }
-    }
     _dragMode = _DragMode.none;
     _dragStartLocal = null;
     _dragOrigRectFrac = null;
+  }
+
+  Future<void> _onDoubleTapAdd(Offset localPx, Size canvasPx) async {
+    // Double-tap kena kotak yang sudah ada -- anggap user cuma mau pilih
+    // kotak itu (mis. supaya gagang resize-nya aktif), bukan menambah baru.
+    final hitIdx = _hitBox(localPx, canvasPx);
+    if (hitIdx != null) {
+      setState(() => _selectedIdx = hitIdx);
+      return;
+    }
+
+    if (_addingBox) return; // hindari dobel-tambah kalau tap kedua masuk selagi masih menunggu
+    _addingBox = true;
+
+    final frac = _toFrac(localPx, canvasPx);
+    Rect? fitted;
+    if (widget.autoFitBoxAt != null) {
+      try {
+        fitted = await widget.autoFitBoxAt!(frac.dx, frac.dy);
+      } catch (_) {
+        fitted = null; // tebakan otomatis gagal -- jatuh ke ukuran default
+      }
+    }
+    _addingBox = false;
+    if (!mounted) return;
+
+    final rect = fitted ??
+        Rect.fromCenter(
+          center: frac,
+          width: _kDefaultAddSizeFraction,
+          height: _kDefaultAddSizeFraction,
+        );
+    final clamped = Rect.fromLTRB(
+      rect.left.clamp(0.0, 1.0),
+      rect.top.clamp(0.0, 1.0),
+      rect.right.clamp(0.0, 1.0),
+      rect.bottom.clamp(0.0, 1.0),
+    );
+    if (clamped.width <= 0 || clamped.height <= 0) return;
+
+    final newBox = DetectedObject(
+      label: widget.activeClass,
+      x: clamped.left,
+      y: clamped.top,
+      width: clamped.width,
+      height: clamped.height,
+      confidence: kManualBoxConfidence,
+    );
+    final next = List<DetectedObject>.from(widget.boxes)..add(newBox);
+    setState(() => _selectedIdx = next.length - 1);
+    _emit(next);
   }
 
   @override
@@ -343,18 +381,15 @@ class _BoundingBoxEditorState extends State<BoundingBoxEditor> {
                             onPanStart: (d) => _onPanStart(d, canvasPx),
                             onPanUpdate: (d) => _onPanUpdate(d, canvasPx),
                             onPanEnd: _onPanEnd,
+                            onDoubleTapDown: (d) => _onDoubleTapAdd(d.localPosition, canvasPx),
                             child: CustomPaint(
                               painter: _EditorPainter(
                                 boxes: widget.boxes,
                                 selectedIdx: _selectedIdx,
-                                drawingRectFrac: _drawingRectFrac,
-                                activeClassColor: _optionFor(widget.activeClass).color,
                                 colorFor: (label) => _optionFor(label).color,
                               ),
                             ),
                           ),
-                          if (_selectedIdx != null && _selectedIdx! < widget.boxes.length)
-                            _buildDeleteBadge(canvasPx),
                         ],
                       );
                     },
@@ -370,28 +405,6 @@ class _BoundingBoxEditorState extends State<BoundingBoxEditor> {
           _buildBoxList(),
         ],
       ],
-    );
-  }
-
-  Widget _buildDeleteBadge(Size canvasPx) {
-    final r = _rectOf(widget.boxes[_selectedIdx!]);
-    final left = (r.right * canvasPx.width - 14).clamp(0.0, canvasPx.width - 28);
-    final top = (r.top * canvasPx.height - 14).clamp(0.0, canvasPx.height - 28);
-    return Positioned(
-      left: left,
-      top: top,
-      child: GestureDetector(
-        onTap: _deleteSelected,
-        child: Container(
-          width: 28,
-          height: 28,
-          decoration: const BoxDecoration(
-            color: Colors.black87,
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(Icons.close, color: Colors.white, size: 18),
-        ),
-      ),
     );
   }
 
@@ -438,10 +451,18 @@ class _BoundingBoxEditorState extends State<BoundingBoxEditor> {
             }).toList(),
           ),
         ),
-        IconButton(
-          icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-          tooltip: 'Hapus kotak ini',
+        // Tombol hapus SATU-SATUNYA di sini (bawah foto) -- badge "x" di
+        // atas foto sengaja dihapus, lihat catatan di doc comment kelas ini.
+        FilledButton.icon(
           onPressed: _deleteSelected,
+          style: FilledButton.styleFrom(
+            backgroundColor: Colors.red.shade50,
+            foregroundColor: Colors.redAccent,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            visualDensity: VisualDensity.compact,
+          ),
+          icon: const Icon(Icons.delete_outline, size: 18),
+          label: const Text('Hapus', style: TextStyle(fontSize: 12)),
         ),
       ],
     );
@@ -450,7 +471,8 @@ class _BoundingBoxEditorState extends State<BoundingBoxEditor> {
   Widget _buildBoxList() {
     if (widget.boxes.isEmpty) {
       return const Text(
-        'Belum ada kotak. Gambar langsung di foto (tekan & seret) untuk menandai objek yang belum tertangkap.',
+        'Belum ada kotak. Double-tap langsung di foto (di atas objeknya) '
+        'untuk menandai objek yang belum tertangkap.',
         style: TextStyle(fontSize: 11, color: Colors.black45),
       );
     }
@@ -484,15 +506,11 @@ class _BoundingBoxEditorState extends State<BoundingBoxEditor> {
 class _EditorPainter extends CustomPainter {
   final List<DetectedObject> boxes;
   final int? selectedIdx;
-  final Rect? drawingRectFrac;
-  final Color activeClassColor;
   final Color Function(String label) colorFor;
 
   _EditorPainter({
     required this.boxes,
     required this.selectedIdx,
-    required this.drawingRectFrac,
-    required this.activeClassColor,
     required this.colorFor,
   });
 
@@ -538,27 +556,10 @@ class _EditorPainter extends CustomPainter {
         }
       }
     }
-
-    if (drawingRectFrac != null) {
-      final r = drawingRectFrac!;
-      final rect = Rect.fromLTWH(
-        r.left * size.width,
-        r.top * size.height,
-        r.width * size.width,
-        r.height * size.height,
-      );
-      final dashPaint = Paint()
-        ..color = activeClassColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2;
-      canvas.drawRect(rect, dashPaint);
-    }
   }
 
   @override
   bool shouldRepaint(covariant _EditorPainter oldDelegate) {
-    return oldDelegate.boxes != boxes ||
-        oldDelegate.selectedIdx != selectedIdx ||
-        oldDelegate.drawingRectFrac != drawingRectFrac;
+    return oldDelegate.boxes != boxes || oldDelegate.selectedIdx != selectedIdx;
   }
 }
